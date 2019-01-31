@@ -23,10 +23,8 @@ namespace HttpOverStream.AspnetCore
 
         }
 
-
-
         public CustomListenerHost( IFeatureCollection featureCollection, IListen listener)
-        {           
+        {
             Features = featureCollection ?? throw new ArgumentNullException(nameof(featureCollection));
             _listener = listener ?? throw new ArgumentNullException(nameof(listener));
         }
@@ -40,24 +38,31 @@ namespace HttpOverStream.AspnetCore
 
         async void HandleClientStream(Stream stream, IHttpApplication<HostingApplication.Context> application)
         {
-            using (stream)
+            try
             {
-                var httpCtx = new DefaultHttpContext();
-                var requestFeature = await CreateRequesteAsync(stream).ConfigureAwait(false);
-                httpCtx.Features.Set<IHttpRequestFeature>(requestFeature);
-                var responseFeature = new HttpResponseFeature();
-                httpCtx.Features.Set<IHttpResponseFeature>(responseFeature);
-                var ctx = application.CreateContext(httpCtx.Features);
-                var body = new MemoryStream();
-                responseFeature.Body = body;
-                await application.ProcessRequestAsync(ctx).ConfigureAwait(false);
-                var writer = new HttpHeaderWriter(stream, 1024);
-                await writer.WriteStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
-                await writer.FlushAsync().ConfigureAwait(false);
-                body.Position = 0;
-                await body.CopyToAsync(stream).ConfigureAwait(false);
-                await stream.FlushAsync().ConfigureAwait(false);
-                await ((stream as IWithCloseWriteSupport)?.CloseWriteAsync() ?? Task.CompletedTask).ConfigureAwait(false);
+                using (stream)
+                {
+                    var httpCtx = new DefaultHttpContext();
+                    var requestFeature = await CreateRequestAsync(stream).ConfigureAwait(false);
+                    httpCtx.Features.Set<IHttpRequestFeature>(requestFeature);
+                    var responseFeature = new HttpResponseFeature();
+                    httpCtx.Features.Set<IHttpResponseFeature>(responseFeature);
+                    var ctx = application.CreateContext(httpCtx.Features);
+                    var body = new MemoryStream();
+                    responseFeature.Body = body;
+                    await application.ProcessRequestAsync(ctx).ConfigureAwait(false);
+                    var writer = new HttpHeaderWriter(stream, 1024);
+                    await writer.WriteStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
+                    await writer.FlushAsync().ConfigureAwait(false);
+                    body.Position = 0;
+                    await body.CopyToAsync(stream).ConfigureAwait(false);
+                    await stream.FlushAsync().ConfigureAwait(false);
+                    await ((stream as IWithCloseWriteSupport)?.CloseWriteAsync() ?? Task.CompletedTask).ConfigureAwait(false);
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine($"[CustomListenerHost]: error handling client stream: {e.Message}");
             }
         }
 
@@ -81,9 +86,9 @@ namespace HttpOverStream.AspnetCore
                 (var name, var values) = HttpParser.ParseHeaderNameValue(line);
                 result.Headers.Add(name, new Microsoft.Extensions.Primitives.StringValues(values.ToArray()));
             }
-            result.Scheme = uri.Scheme;    
+            result.Scheme = uri.Scheme;
             result.Path = PathString.FromUriComponent(uri);
-            result.QueryString = QueryString.FromUriComponent(uri).Value;            
+            result.QueryString = QueryString.FromUriComponent(uri).Value;
             result.Body = new StreamWithPrefix(lineReader.Remaining, stream, result.Headers.ContentLength);
             return result;
         }
