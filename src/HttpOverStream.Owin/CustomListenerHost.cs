@@ -37,40 +37,55 @@ namespace HttpOverStream.Owin
             await PopulateRequestAsync(stream, owinContext.Request).ConfigureAwait(false);
             var body = new MemoryStream();
             owinContext.Response.Body = body;
+            // execute higher level middleware
             await _app(owinContext.Environment).ConfigureAwait(false);
+            // write the response
             await body.FlushAsync().ConfigureAwait(false);
-            var writer = new HttpHeaderWriter(stream, 1024);
-            await writer.WriteStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
-            await writer.FlushAsync().ConfigureAwait(false);
+            await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
             body.Position = 0;
             await body.CopyToAsync(stream).ConfigureAwait(false);
             await stream.FlushAsync().ConfigureAwait(false);
-            await ((stream as IWithCloseWriteSupport)?.CloseWriteAsync() ?? Task.CompletedTask).ConfigureAwait(false);
         }
+
+        static Uri _localhostUri = new Uri("http://localhost/");
 
         private async Task PopulateRequestAsync(Stream stream, IOwinRequest request)
         {
-            var lineReader = new ByLineReader(stream, 1024);
-            var requestLine = await lineReader.NextLineAsync().ConfigureAwait(false);
-            var firstLine = HttpParser.GetAsciiString(requestLine);
+            var firstLine = await stream.ReadLineAsync().ConfigureAwait(false);
             var parts = firstLine.Split(' ');
+            if (parts.Length < 3)
+            {
+                throw new FormatException($"{firstLine} is not a valid request status");
+            }
             request.Method = parts[0];
             request.Protocol = parts[2];
-            var uri = new Uri("http://localhost" + parts[1]);
+            var uri = new Uri(parts[1], UriKind.RelativeOrAbsolute);
+            if (!uri.IsAbsoluteUri)
+            {
+                uri = new Uri(_localhostUri, uri);
+            }
             for (; ; )
             {
-                var line = await lineReader.NextLineAsync().ConfigureAwait(false);
-                if (line.Count == 0)
+                var line = await stream.ReadLineAsync().ConfigureAwait(false);
+                if (line.Length == 0)
                 {
                     break;
                 }
-                (var name, var values) = HttpParser.ParseHeaderNameValue(line);
+                (var name, var values) = HttpParser.ParseHeaderNameValues(line);
                 request.Headers.Add(name, values.ToArray());
             }
             request.Scheme = uri.Scheme;
             request.Path = PathString.FromUriComponent(uri);
             request.QueryString = QueryString.FromUriComponent(uri);
-            request.Body = new StreamWithPrefix(lineReader.Remaining, stream, null);
+
+            long? length = null;
+
+            var contentLengthValues = request.Headers.GetValues("Content-Length");
+            if (contentLengthValues!= null && contentLengthValues.Count > 0)
+            {
+                length = long.Parse(contentLengthValues[0]);
+            }
+            request.Body = new BodyStream(stream, length);
         }
 
         public void Dispose()
@@ -88,10 +103,7 @@ namespace HttpOverStream.Owin
             var options = new StartOptions();
             options.AppStartup = typeof(TStartup).AssemblyQualifiedName;
             var context = new StartContext(options);
-            context.ServerFactory = new ServerFactoryAdapter(new CustomListenerHostFactory(listener));
-            IServiceProvider services = ServicesFactory.Create();
-            var engine = services.GetService<IHostingEngine>();
-            return engine.Start(context);
+            return Start(context, listener);
         }
 
         public static IDisposable Start(Action<IAppBuilder> startup, IListen listener)
@@ -100,6 +112,11 @@ namespace HttpOverStream.Owin
             options.AppStartup = startup.Method.ReflectedType.FullName;
             var context = new StartContext(options);
             context.Startup = startup;
+            return Start(context, listener);
+        }
+
+        private static IDisposable Start(StartContext context, IListen listener)
+        {
             context.ServerFactory = new ServerFactoryAdapter(new CustomListenerHostFactory(listener));
             IServiceProvider services = ServicesFactory.Create();
             var engine = services.GetService<IHostingEngine>();

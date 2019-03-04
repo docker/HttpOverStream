@@ -51,13 +51,10 @@ namespace HttpOverStream.AspnetCore
                     var body = new MemoryStream();
                     responseFeature.Body = body;
                     await application.ProcessRequestAsync(ctx).ConfigureAwait(false);
-                    var writer = new HttpHeaderWriter(stream, 1024);
-                    await writer.WriteStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
-                    await writer.FlushAsync().ConfigureAwait(false);
+                    await stream.WriteResponseStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);                    
                     body.Position = 0;
                     await body.CopyToAsync(stream).ConfigureAwait(false);
                     await stream.FlushAsync().ConfigureAwait(false);
-                    await ((stream as IWithCloseWriteSupport)?.CloseWriteAsync() ?? Task.CompletedTask).ConfigureAwait(false);
                 }
             }
             catch (Exception e)
@@ -65,31 +62,35 @@ namespace HttpOverStream.AspnetCore
                 Console.WriteLine($"[CustomListenerHost]: error handling client stream: {e.Message}");
             }
         }
+        static Uri _localhostUri = new Uri("http://localhost/");
 
-        async Task<HttpRequestFeature> CreateRequesteAsync(Stream stream)
+        async Task<HttpRequestFeature> CreateRequestAsync(Stream stream)
         {
-            var lineReader = new ByLineReader(stream, 1024);
-            var requestLine = await lineReader.NextLineAsync().ConfigureAwait(false);
-            var firstLine = HttpParser.GetAsciiString(requestLine);
+            var firstLine = await stream.ReadLineAsync().ConfigureAwait(false);
             var parts = firstLine.Split(' ');
             var result = new HttpRequestFeature();
+
             result.Method = parts[0];
-            var uri = new Uri("http://localhost"+ parts[1]);
+            var uri = new Uri(parts[1], UriKind.RelativeOrAbsolute);
+            if (!uri.IsAbsoluteUri)
+            {
+                uri = new Uri(_localhostUri, uri);
+            }
             result.Protocol = parts[2];
             for(; ; )
             {
-                var line = await lineReader.NextLineAsync().ConfigureAwait(false);
-                if(line.Count == 0)
+                var line = await stream.ReadLineAsync().ConfigureAwait(false);
+                if(line.Length == 0)
                 {
                     break;
                 }
-                (var name, var values) = HttpParser.ParseHeaderNameValue(line);
+                (var name, var values) = HttpParser.ParseHeaderNameValues(line);
                 result.Headers.Add(name, new Microsoft.Extensions.Primitives.StringValues(values.ToArray()));
             }
             result.Scheme = uri.Scheme;
             result.Path = PathString.FromUriComponent(uri);
             result.QueryString = QueryString.FromUriComponent(uri).Value;
-            result.Body = new StreamWithPrefix(lineReader.Remaining, stream, result.Headers.ContentLength);
+            result.Body = new BodyStream(stream, result.Headers.ContentLength);
             return result;
         }
 
