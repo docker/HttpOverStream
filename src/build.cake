@@ -37,4 +37,38 @@ Task("Test")
       }
 });
 
+Task("Nuget-pack")
+  .IsDependentOn("Nuget-Restore")
+  .Does(()=>{
+    var version = "0.1.0";
+    if(BuildSystem.AppVeyor.Environment.Repository.Tag.IsTag){
+      version = BuildSystem.AppVeyor.Environment.Repository.Tag.Name;
+    }
+    var settings = new DotNetCorePackSettings
+     {
+        Configuration = "Release",
+        OutputDirectory = "./nupkgs/",
+        MSBuildSettings = new DotNetCoreMSBuildSettings().WithProperty("PackageVersion", version),
+
+     };
+
+     DotNetCorePack("./", settings);
+  });
+
+Task("Nuget-push")
+.IsDependentOn("Nuget-pack")
+.Does(()=>{
+  if(!BuildSystem.AppVeyor.Environment.Repository.Tag.IsTag){
+    return;
+  }
+   // Get the paths to the packages.
+ var packages = GetFiles("./nupkgs/*.nupkg");
+
+ // Push the package.
+ NuGetPush(packages, new NuGetPushSettings {
+     Source = "https://api.nuget.org/v3/index.json",
+     ApiKey =  EnvironmentVariable("NugetAPIKey")
+ });
+});
+
 RunTarget(target);
