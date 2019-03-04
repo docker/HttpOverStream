@@ -15,58 +15,7 @@ using System.Threading.Tasks;
 using System.Web.Http;
 
 namespace HttpOverStream.WebApiTest
-{
-    public class PipStreamWithCloseWrite : Stream, IWithCloseWriteSupport
-    {
-        private readonly PipeStream _underlying;
-
-        public PipStreamWithCloseWrite(PipeStream underlying)
-        {
-            _underlying = underlying;
-        }
-        public Task CloseWriteAsync()
-        {
-            int result;
-            WriteFile(_underlying.SafePipeHandle, IntPtr.Zero, 0, out result, IntPtr.Zero);
-            return Task.CompletedTask;
-        }
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        internal static extern int WriteFile(SafeHandle handle, IntPtr bytes, int numBytesToWrite, out int numBytesWritten, IntPtr mustBeZero);
-
-        public override IAsyncResult BeginRead(byte[] buffer, int offset, int count, AsyncCallback callback, object state) => _underlying.BeginRead(buffer, offset, count, callback, state);
-        public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback callback, object state) => _underlying.BeginWrite(buffer, offset, count, callback, state);
-        public override bool CanRead => _underlying.CanRead;
-        public override bool CanSeek => _underlying.CanSeek;
-        public override bool CanTimeout => _underlying.CanTimeout;
-        public override bool CanWrite => _underlying.CanWrite;
-        public override void Close() => _underlying.Close();
-        public override Task CopyToAsync(Stream destination, int bufferSize, CancellationToken cancellationToken) => _underlying.CopyToAsync(destination, bufferSize, cancellationToken);
-        protected override void Dispose(bool disposing)
-        {
-            if (disposing)
-            {
-                _underlying.Dispose();
-            }
-        }
-        public override int EndRead(IAsyncResult asyncResult) => _underlying.EndRead(asyncResult);
-        public override void EndWrite(IAsyncResult asyncResult) => _underlying.EndWrite(asyncResult);
-        public override void Flush() => _underlying.Flush();
-        public override Task FlushAsync(CancellationToken cancellationToken) => _underlying.FlushAsync(cancellationToken);
-        public override object InitializeLifetimeService() => _underlying.InitializeLifetimeService();
-        public override long Length => _underlying.Length;
-        public override long Position { get => _underlying.Position; set => _underlying.Position = value; }
-        public override int Read(byte[] buffer, int offset, int count) => _underlying.Read(buffer, offset, count);
-        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => _underlying.ReadAsync(buffer, offset, count, cancellationToken);
-        public override int ReadByte() => _underlying.ReadByte();
-        public override int ReadTimeout { get => _underlying.ReadTimeout; set => _underlying.ReadTimeout = value; }
-        public override long Seek(long offset, SeekOrigin origin) => _underlying.Seek(offset, origin);
-        public override void SetLength(long value) => _underlying.SetLength(value);
-        public override void Write(byte[] buffer, int offset, int count) => _underlying.Write(buffer, offset, count);
-        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) => _underlying.WriteAsync(buffer, offset, count, cancellationToken);
-        public override void WriteByte(byte value) => _underlying.WriteByte(value);
-        public override int WriteTimeout { get => _underlying.WriteTimeout; set => _underlying.WriteTimeout = value; }
-    }
+{  
 
     [RoutePrefix("api/e2e-tests")]
     public class EndToEndApiController : ApiController
@@ -116,10 +65,9 @@ namespace HttpOverStream.WebApiTest
                 {
                     while (!ct.IsCancellationRequested)
                     {
-                        var srv = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Message, PipeOptions.Asynchronous | PipeOptions.WriteThrough);
-                        await srv.WaitForConnectionAsync(ct);
-                        srv.ReadMode = PipeTransmissionMode.Message;
-                        onConnection(new PipStreamWithCloseWrite(srv));
+                        var srv = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+                        await srv.WaitForConnectionAsync(ct);      
+                        onConnection(srv);
                     }
                 });
                 return Task.CompletedTask;
@@ -146,10 +94,9 @@ namespace HttpOverStream.WebApiTest
 
             public async ValueTask<Stream> DialAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
-                var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough);
+                var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
                 await pipe.ConnectAsync(0,cancellationToken).ConfigureAwait(false);
-                pipe.ReadMode = PipeTransmissionMode.Message;
-                return new PipStreamWithCloseWrite(pipe);
+                return pipe;
             }
         }
 
@@ -169,6 +116,31 @@ namespace HttpOverStream.WebApiTest
                 var result = await client.GetAsync("http://localhost/api/e2e-tests/hello-world");
                 Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
             }
+        }
+
+        [TestMethod]
+        public async Task TestBodyStream()
+        {
+            var listener = new TestListener("test-body-stream");
+            var payload = Encoding.UTF8.GetBytes("Hello world");
+            listener.StartAsync(con =>
+            {
+                Task.Run(async () =>
+                {
+                    await con.WriteAsync(payload, 0, payload.Length);
+                });
+            }, CancellationToken.None);
+
+
+            var dialer = new TestDialer("test-body-stream");
+            var stream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None);
+            var bodyStream = new BodyStream(stream, payload.Length);
+            var data = new byte[4096];
+            var read = await bodyStream.ReadAsync(data, 0, data.Length);
+            Assert.AreEqual(payload.Length, read);
+            read = await bodyStream.ReadAsync(data, 0, data.Length);
+            Assert.AreEqual(0, read);
+
         }
 
         [TestMethod]

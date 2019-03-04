@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netcoreapp2.1</TargetFramework>
@@ -17,7 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\HttpOverStream\HttpOverStream.csproj" />
-    <ProjectReference Include="..\HttpOverStream.AspnetCore\HttpOverStream.AspnetCore.csproj" />
     <ProjectReference Include="..\HttpOverStream.Client\HttpOverStream.Client.csproj" />
   </ItemGroup>
 

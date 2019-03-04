@@ -11,7 +11,6 @@ namespace HttpOverStream.Client
 {
     public class DialMessageHandler : HttpMessageHandler
     {
-        private static readonly ulong s_http10Bytes = BinaryPrimitives.ReadUInt64LittleEndian(Encoding.ASCII.GetBytes("HTTP/1.0"));
         public const string UnderlyingStreamProperty = "DIAL_UNDERLYING_STREAM";
         private readonly IDial _dial;
 
@@ -22,22 +21,31 @@ namespace HttpOverStream.Client
 
         private class DialResponseContent : HttpContent
         {
-            private ArraySegment<byte> _remainingFromHeadersLayer;
             private Stream _stream;
-            public void SetContent(ArraySegment<byte> readAhead, Stream unread)
+            private long? _length;
+
+            public void SetContent(Stream unread, long? length)
             {
-                _remainingFromHeadersLayer = readAhead;
                 _stream = unread;
+                _length = length;
             }
+
             protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
             {
-                return stream.WriteAsync(_remainingFromHeadersLayer.Array, _remainingFromHeadersLayer.Offset, _remainingFromHeadersLayer.Count).ContinueWith((_) => _stream.CopyToAsync(stream)).Unwrap();
+                return _stream.CopyToAsync(stream);
             }
+
             protected override bool TryComputeLength(out long length)
             {
+                if (_length.HasValue)
+                {
+                    length = _length.Value;
+                    return true;
+                }
                 length = 0;
                 return false;
             }
+
             protected override void Dispose(bool disposing)
             {
                 base.Dispose(disposing);
@@ -49,7 +57,7 @@ namespace HttpOverStream.Client
 
             protected override Task<Stream> CreateContentReadStreamAsync()
             {
-                return Task.FromResult<Stream>(new StreamWithPrefix(_remainingFromHeadersLayer, _stream, Headers.ContentLength));
+                return Task.FromResult(_stream);
             }
         }
 
@@ -59,29 +67,26 @@ namespace HttpOverStream.Client
             var stream = await _dial.DialAsync(request, cancellationToken).ConfigureAwait(false);
 
             request.Properties.Add(UnderlyingStreamProperty, stream);
-            var headerWriter = new HttpHeaderWriter(stream, 4096);
-            await headerWriter.WriteMethodAndHeadersAsync(request).ConfigureAwait(false);
-            await headerWriter.FlushAsync().ConfigureAwait(false);
+            await stream.WriteMethodAndHeadersAsync(request).ConfigureAwait(false);
             if (request.Content != null)
             {
                 await request.Content.CopyToAsync(stream).ConfigureAwait(false);
             }
             await stream.FlushAsync().ConfigureAwait(false);
-            await ((stream as IWithCloseWriteSupport)?.CloseWriteAsync() ?? Task.CompletedTask).ConfigureAwait(false);
+
             var responseContent = new DialResponseContent();
             var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
-            var lineReader = new ByLineReader(stream, 4096);
-            ParseStatusLine(response, await lineReader.NextLineAsync().ConfigureAwait(false));
+            ParseStatusLine(response, await stream.ReadLineAsync().ConfigureAwait(false));
             for (; ; )
             {
-                var line = await lineReader.NextLineAsync().ConfigureAwait(false);
-                if (line.Count == 0)
+                var line = await stream.ReadLineAsync().ConfigureAwait(false);
+                if (line.Length == 0)
                 {
                     break;
                 }
                 try
                 {
-                    (var name, var value) = HttpParser.ParseHeaderNameValue(line);
+                    (var name, var value) = HttpParser.ParseHeaderNameValues(line);
                     if(!response.Headers.TryAddWithoutValidation(name, value))
                     {
                         response.Content.Headers.TryAddWithoutValidation(name, value);
@@ -92,35 +97,32 @@ namespace HttpOverStream.Client
                     throw new HttpRequestException("Error parsing header", ex);
                 }
             }
-            responseContent.SetContent(lineReader.Remaining, stream);
+            responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength), response.Content.Headers.ContentLength);
             return response;
-
-
         }
 
-
-        private void ParseStatusLine(HttpResponseMessage response, Span<byte> line)
+        private void ParseStatusLine(HttpResponseMessage response, string line)
         {
             const int MinStatusLineLength = 12; // "HTTP/1.x 123" 
             if (line.Length < MinStatusLineLength || line[8] != ' ')
             {
-                throw new HttpRequestException("Invalid response");
+                throw new HttpRequestException("Invalid response, expecting HTTP/1.0");
             }
 
-            ulong first8Bytes = BinaryPrimitives.ReadUInt64LittleEndian(line);
-            if (first8Bytes != s_http10Bytes)
-            {
-                throw new HttpRequestException("Invalid response");
+            if (!line.StartsWith("HTTP/1.0"))
+            {                
+                throw new HttpRequestException("Invalid response, expecting HTTP/1.0");
             }
             response.Version = HttpVersion.Version10;
             // Set the status code
-            byte status1 = line[9], status2 = line[10], status3 = line[11];
-            if (!HttpParser.IsDigit(status1) || !HttpParser.IsDigit(status2) || !HttpParser.IsDigit(status3))
+            if (int.TryParse(line.Substring(9,3), out int statusCode))
             {
-                throw new HttpRequestException("Invalid response");
+                response.StatusCode = (HttpStatusCode)statusCode;
             }
-
-            response.StatusCode = (HttpStatusCode)(100 * (status1 - '0') + 10 * (status2 - '0') + (status3 - '0'));
+            else
+            {
+                throw new HttpRequestException("Invalid response, can't parse status code");
+            }
             // Parse (optional) reason phrase
             if (line.Length == MinStatusLineLength)
             {
@@ -128,15 +130,7 @@ namespace HttpOverStream.Client
             }
             else if (line[MinStatusLineLength] == ' ')
             {
-                Span<byte> reasonBytes = line.Slice(MinStatusLineLength + 1);
-                try
-                {
-                    response.ReasonPhrase = HttpParser.GetAsciiString(reasonBytes);
-                }
-                catch (FormatException error)
-                {
-                    throw new HttpRequestException("Invalid response", error);
-                }
+                response.ReasonPhrase = line.Substring(MinStatusLineLength + 1);
             }
             else
             {
