@@ -94,9 +94,9 @@
       <Project>{fd513277-f032-4106-abcd-9719ada8f3db}</Project>
       <Name>HttpOverStream.Client</Name>
     </ProjectReference>
-    <ProjectReference Include="..\HttpOverStream.Owin\HttpOverStream.Owin.csproj">
+    <ProjectReference Include="..\HttpOverStream.Server.Owin\HttpOverStream.Server.Owin.csproj">
       <Project>{008edf79-f050-49c8-bf5f-25842466369b}</Project>
-      <Name>HttpOverStream.Owin</Name>
+      <Name>HttpOverStream.Server.Owin</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets" Condition="Exists('$(VSToolsPath)\TeamTest\Microsoft.TestTools.targets')" />

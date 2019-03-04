@@ -1,5 +1,4 @@
-﻿using HttpOverStream.AspnetCore;
-using HttpOverStream.Client;
+﻿using HttpOverStream.Client;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -9,12 +8,11 @@ using System.IO;
 using System.IO.Pipes;
 using System.Net.Http;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Xunit;
 
-namespace HttpOverStream.AspnetCoreTest
+namespace HttpOverStream.Server.AspnetCore.Tests
 {
     public class PersonMessage
     {
