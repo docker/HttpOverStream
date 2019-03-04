@@ -9,13 +9,13 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HttpOverStream.Tests", "Htt
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HttpOverStream.Client", "HttpOverStream.Client\HttpOverStream.Client.csproj", "{FD513277-F032-4106-ABCD-9719ADA8F3DB}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HttpOverStream.AspnetCore", "HttpOverStream.AspnetCore\HttpOverStream.AspnetCore.csproj", "{8FC5D101-1708-4B66-A8F1-3CFB50C32146}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HttpOverStream.Server.AspnetCore", "HttpOverStream.Server.AspnetCore\HttpOverStream.Server.AspnetCore.csproj", "{8FC5D101-1708-4B66-A8F1-3CFB50C32146}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpOverStream.Owin", "HttpOverStream.Owin\HttpOverStream.Owin.csproj", "{008EDF79-F050-49C8-BF5F-25842466369B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpOverStream.Server.Owin", "HttpOverStream.Server.Owin\HttpOverStream.Server.Owin.csproj", "{008EDF79-F050-49C8-BF5F-25842466369B}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpOverStream.WebApiTest", "HttpOverStream.WebApiTest\HttpOverStream.WebApiTest.csproj", "{96388CE9-B97A-4754-A3B3-C898CD195969}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpOverStream.Server.Owin.Tests", "HttpOverStream.Server.Owin.Tests\HttpOverStream.Server.Owin.Tests.csproj", "{96388CE9-B97A-4754-A3B3-C898CD195969}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpOverStream.AspnetCoreTest", "HttpOverStream.AspnetCoreTest\HttpOverStream.AspnetCoreTest.csproj", "{1E08ABEF-6BDF-4B01-87D4-2188227ACD63}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HttpOverStream.Server.AspnetCore.Tests", "HttpOverStream.Server.AspnetCore.Tests\HttpOverStream.Server.AspnetCore.Tests.csproj", "{1E08ABEF-6BDF-4B01-87D4-2188227ACD63}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

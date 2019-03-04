@@ -11,7 +11,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace HttpOverStream.Owin
+namespace HttpOverStream.Server.Owin
 {
     public class CustomListenerHost : IDisposable
     {

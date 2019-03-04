@@ -1,21 +1,17 @@
 ﻿using HttpOverStream.Client;
-using HttpOverStream.Owin;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Owin;
 using System;
-using System.Collections.Generic;
 using System.IO;
 using System.IO.Pipes;
-using System.Linq;
 using System.Net.Http;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Http;
 
-namespace HttpOverStream.WebApiTest
-{  
+namespace HttpOverStream.Server.Owin.Tests
+{
 
     [RoutePrefix("api/e2e-tests")]
     public class EndToEndApiController : ApiController
@@ -123,7 +119,7 @@ namespace HttpOverStream.WebApiTest
         {
             var listener = new TestListener("test-body-stream");
             var payload = Encoding.UTF8.GetBytes("Hello world");
-            listener.StartAsync(con =>
+            await listener.StartAsync(con =>
             {
                 Task.Run(async () =>
                 {

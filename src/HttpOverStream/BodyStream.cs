@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,7 +8,6 @@ namespace HttpOverStream
     public class BodyStream : Stream
     {
         long? _length;
-        long _offset;
         long _read;
         public Stream Underlying { get; private set; }
 
@@ -55,7 +52,7 @@ namespace HttpOverStream
             {
                 if (!_length.HasValue)
                 {
-                    return Underlying.Length - _offset;
+                    return Underlying.Length;
                 }
                 return _length.Value;
             }
