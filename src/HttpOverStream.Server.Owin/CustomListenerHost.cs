@@ -1,4 +1,5 @@
 ﻿using Microsoft.Owin;
+using Microsoft.Owin.Logging;
 using Microsoft.Owin.Hosting;
 using Microsoft.Owin.Hosting.Engine;
 using Microsoft.Owin.Hosting.ServerFactory;
@@ -17,13 +18,16 @@ namespace HttpOverStream.Server.Owin
     {
         private readonly IListen _listener;
         private readonly Func<IDictionary<string, object>, Task> _app;
+        private readonly ILogger _logger;
         private bool _disposed;
 
-        private CustomListenerHost(IListen listener, Func<IDictionary<string, object>, Task> app)
+        private CustomListenerHost(IListen listener, Func<IDictionary<string, object>, Task> app, IAppBuilder builder)
         {
             _listener = listener;
             _app = app;
+            _logger = builder.CreateLogger<CustomListenerHost>();
         }
+
 
         private void Start()
         {
@@ -32,19 +36,29 @@ namespace HttpOverStream.Server.Owin
 
         private async void OnAccept(Stream stream)
         {
-            var owinContext = new OwinContext();
-            owinContext.Set("owin.Version", "1.0");
-            await PopulateRequestAsync(stream, owinContext.Request).ConfigureAwait(false);
-            var body = new MemoryStream();
-            owinContext.Response.Body = body;
-            // execute higher level middleware
-            await _app(owinContext.Environment).ConfigureAwait(false);
-            // write the response
-            await body.FlushAsync().ConfigureAwait(false);
-            await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
-            body.Position = 0;
-            await body.CopyToAsync(stream).ConfigureAwait(false);
-            await stream.FlushAsync().ConfigureAwait(false);
+            try
+            {
+                using (stream)
+                {
+                    var owinContext = new OwinContext();
+                    owinContext.Set("owin.Version", "1.0");
+                    await PopulateRequestAsync(stream, owinContext.Request).ConfigureAwait(false);
+                    var body = new MemoryStream();
+                    owinContext.Response.Body = body;
+                    // execute higher level middleware
+                    await _app(owinContext.Environment).ConfigureAwait(false);
+                    // write the response
+                    await body.FlushAsync().ConfigureAwait(false);
+                    await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
+                    body.Position = 0;
+                    await body.CopyToAsync(stream).ConfigureAwait(false);
+                    await stream.FlushAsync().ConfigureAwait(false);
+                }
+            }
+            catch(Exception e)
+            {
+                _logger?.WriteWarning("error handling client stream", e);
+            }
         }
 
         static Uri _localhostUri = new Uri("http://localhost/");
@@ -117,15 +131,16 @@ namespace HttpOverStream.Server.Owin
 
         private static IDisposable Start(StartContext context, IListen listener)
         {
-            context.ServerFactory = new ServerFactoryAdapter(new CustomListenerHostFactory(listener));
             IServiceProvider services = ServicesFactory.Create();
             var engine = services.GetService<IHostingEngine>();
+            context.ServerFactory = new ServerFactoryAdapter(new CustomListenerHostFactory(listener));            
             return engine.Start(context);
         }
 
         private class CustomListenerHostFactory
         {
             private readonly IListen _listener;
+            private IAppBuilder _builder;
 
             public CustomListenerHostFactory(IListen listener)
             {
@@ -133,9 +148,14 @@ namespace HttpOverStream.Server.Owin
             }
             public IDisposable Create(Func<IDictionary<string, object>, Task> app, IDictionary<string, object> properties)
             {
-                var result = new CustomListenerHost(_listener, app);
-                result.Start();
-                return result;
+                var host = new CustomListenerHost(_listener, app, _builder);
+                host.Start();
+                return host;
+            }
+
+            public void Initialize(IAppBuilder builder)
+            {
+                _builder = builder;
             }
         }
 

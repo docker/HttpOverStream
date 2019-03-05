@@ -95,7 +95,7 @@ namespace HttpOverStream.Client
                     throw new HttpRequestException("Error parsing header", ex);
                 }
             }
-            responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength), response.Content.Headers.ContentLength);
+            responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd:true), response.Content.Headers.ContentLength);
             return response;
         }
 
