@@ -9,12 +9,26 @@ namespace HttpOverStream
     {
         long? _length;
         long _read;
+        bool _closeOnReachEnd;
         public Stream Underlying { get; private set; }
 
-        public BodyStream(Stream underlying, long? length)
+        public BodyStream(Stream underlying, long? length, bool closeOnReachEnd = false)
         {
             Underlying = underlying;
             _length = length;
+            _closeOnReachEnd = closeOnReachEnd;
+        }
+
+        private void CloseIfReachedEnd()
+        {
+            if (!_closeOnReachEnd || !_length.HasValue)
+            {
+                return;
+            }
+            if (_read >= _length.Value)
+            {
+                Close();
+            }
         }
 
         private int BoundedCount(int count)
@@ -37,6 +51,7 @@ namespace HttpOverStream
             }
             var read = Underlying.Read(buffer, offset, count);
             _read += read;
+            CloseIfReachedEnd();
             return read;
         }
         public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
@@ -59,11 +74,8 @@ namespace HttpOverStream
         }
         public override long Position
         {
-            get => Underlying.Position;
-            set
-            {
-                throw new InvalidOperationException("Cannot seek");
-            }
+            get => throw new InvalidOperationException("Cannot seek");
+            set => throw new InvalidOperationException("Cannot seek");
         }
 
         public override async Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
@@ -75,9 +87,17 @@ namespace HttpOverStream
             }
             var read = await Underlying.ReadAsync(buffer, offset, count, cancellationToken).ConfigureAwait(false);
             _read += read;
+            CloseIfReachedEnd();
             return read;
         }
         public override void Close() => Underlying.Close();
+        protected override void Dispose(bool disposing) {
+            base.Dispose(disposing);
+            if (disposing)
+            {
+                Underlying.Dispose();
+            }
+        }
 
     }
 }

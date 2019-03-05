@@ -1,7 +1,9 @@
 ﻿using HttpOverStream.Client;
+using Microsoft.Owin.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Owin;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Net.Http;
@@ -62,7 +64,7 @@ namespace HttpOverStream.Server.Owin.Tests
                     while (!ct.IsCancellationRequested)
                     {
                         var srv = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-                        await srv.WaitForConnectionAsync(ct);      
+                        await srv.WaitForConnectionAsync(ct);
                         onConnection(srv);
                     }
                 });
@@ -91,7 +93,7 @@ namespace HttpOverStream.Server.Owin.Tests
             public async ValueTask<Stream> DialAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
                 var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-                await pipe.ConnectAsync(0,cancellationToken).ConfigureAwait(false);
+                await pipe.ConnectAsync(0, cancellationToken).ConfigureAwait(false);
                 return pipe;
             }
         }
@@ -152,6 +154,48 @@ namespace HttpOverStream.Server.Owin.Tests
             }, new TestListener("legacy_test_post")))
             {
                 var client = new HttpClient(new DialMessageHandler(new TestDialer("legacy_test_post")));
+                var result = await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" });
+                var wlcMsg = await result.Content.ReadAsAsync<WelcomeMessage>();
+                Assert.AreEqual("Hello Test", wlcMsg.Text);
+            }
+        }
+
+        class TestLoggerFactory : ILoggerFactory, ILogger
+        {
+            public TaskCompletionSource<Exception> ExceptionReceived { get; private set; } = new TaskCompletionSource<Exception>();
+            public ILogger Create(string name) => this;
+            
+            public bool WriteCore(TraceEventType eventType, int eventId, object state, Exception exception, Func<object, Exception, string> formatter)
+            {
+                ExceptionReceived.TrySetResult(exception);
+                return true;
+            }
+        }
+
+        [TestMethod]
+        public async Task TestStreamInteruption()
+        {
+            var logFactory = new TestLoggerFactory();
+            using (CustomListenerHost.Start(app =>
+            {
+                HttpConfiguration config = new HttpConfiguration();
+                config.MapHttpAttributeRoutes();
+                config.SuppressDefaultHostAuthentication();
+                config.SuppressHostPrincipal();
+                app.UseWebApi(config);
+                app.SetLoggerFactory(logFactory);                
+            }, new TestListener("test_stream_interuption")))
+            {
+                var dialer = new TestDialer("test_stream_interuption");
+                using(var fuzzyStream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None))
+                {
+                    // just write the first line of a valid http request, and drop the connection
+                    var payload = Encoding.ASCII.GetBytes("GET /docs/index.html HTTP/1.0\n");
+                    await fuzzyStream.WriteAsync(payload, 0, payload.Length);
+                }
+                var ex = await logFactory.ExceptionReceived.Task;
+                Assert.IsInstanceOfType(ex, typeof(EndOfStreamException));
+                var client = new HttpClient(new DialMessageHandler(dialer));
                 var result = await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" });
                 var wlcMsg = await result.Content.ReadAsAsync<WelcomeMessage>();
                 Assert.AreEqual("Hello Test", wlcMsg.Text);
