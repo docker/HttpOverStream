@@ -1,4 +1,5 @@
 ﻿using HttpOverStream.Client;
+using HttpOverStream.NamedPipe;
 using Microsoft.Owin.Logging;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Owin;
@@ -45,59 +46,6 @@ namespace HttpOverStream.Server.Owin.Tests
     [TestClass]
     public class EndToEndTests
     {
-        private class TestListener : IListen
-        {
-            public TestListener(string pipeName)
-            {
-                _pipeName = pipeName;
-            }
-            private Task _listenTask;
-            private CancellationTokenSource _listenTcs;
-            private readonly string _pipeName;
-
-            public Task StartAsync(Action<Stream> onConnection, CancellationToken cancellationToken)
-            {
-                _listenTcs = new CancellationTokenSource();
-                var ct = _listenTcs.Token;
-                _listenTask = Task.Run(async () =>
-                {
-                    while (!ct.IsCancellationRequested)
-                    {
-                        var srv = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
-                        await srv.WaitForConnectionAsync(ct);
-                        onConnection(srv);
-                    }
-                });
-                return Task.CompletedTask;
-            }
-            public async Task StopAsync(CancellationToken cancellationToken)
-            {
-                _listenTcs.Cancel();
-                try
-                {
-                    await _listenTask.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { }
-            }
-        }
-
-        private class TestDialer : IDial
-        {
-            private readonly string _pipeName;
-
-            public TestDialer(string pipeName)
-            {
-                _pipeName = pipeName;
-            }
-
-            public async ValueTask<Stream> DialAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            {
-                var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-                await pipe.ConnectAsync(0, cancellationToken).ConfigureAwait(false);
-                return pipe;
-            }
-        }
-
         [TestMethod]
         public async Task TestGet()
         {
@@ -108,9 +56,9 @@ namespace HttpOverStream.Server.Owin.Tests
                 config.SuppressDefaultHostAuthentication();
                 config.SuppressHostPrincipal();
                 app.UseWebApi(config);
-            }, new TestListener("legacy_test_get")))
+            }, new NamedPipeListener("legacy_test_get")))
             {
-                var client = new HttpClient(new DialMessageHandler(new TestDialer("legacy_test_get")));
+                var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("legacy_test_get")));
                 var result = await client.GetAsync("http://localhost/api/e2e-tests/hello-world");
                 Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
             }
@@ -119,7 +67,7 @@ namespace HttpOverStream.Server.Owin.Tests
         [TestMethod]
         public async Task TestBodyStream()
         {
-            var listener = new TestListener("test-body-stream");
+            var listener = new NamedPipeListener("test-body-stream");
             var payload = Encoding.UTF8.GetBytes("Hello world");
             await listener.StartAsync(con =>
             {
@@ -130,7 +78,7 @@ namespace HttpOverStream.Server.Owin.Tests
             }, CancellationToken.None);
 
 
-            var dialer = new TestDialer("test-body-stream");
+            var dialer = new NamedPipeDialer("test-body-stream");
             var stream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None);
             var bodyStream = new BodyStream(stream, payload.Length);
             var data = new byte[4096];
@@ -151,9 +99,9 @@ namespace HttpOverStream.Server.Owin.Tests
                 config.SuppressDefaultHostAuthentication();
                 config.SuppressHostPrincipal();
                 app.UseWebApi(config);
-            }, new TestListener("legacy_test_post")))
+            }, new NamedPipeListener("legacy_test_post")))
             {
-                var client = new HttpClient(new DialMessageHandler(new TestDialer("legacy_test_post")));
+                var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("legacy_test_post")));
                 var result = await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" });
                 var wlcMsg = await result.Content.ReadAsAsync<WelcomeMessage>();
                 Assert.AreEqual("Hello Test", wlcMsg.Text);
@@ -184,9 +132,9 @@ namespace HttpOverStream.Server.Owin.Tests
                 config.SuppressHostPrincipal();
                 app.UseWebApi(config);
                 app.SetLoggerFactory(logFactory);                
-            }, new TestListener("test_stream_interuption")))
+            }, new NamedPipeListener("test_stream_interuption")))
             {
-                var dialer = new TestDialer("test_stream_interuption");
+                var dialer = new NamedPipeDialer("test_stream_interuption");
                 using(var fuzzyStream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None))
                 {
                     // just write the first line of a valid http request, and drop the connection

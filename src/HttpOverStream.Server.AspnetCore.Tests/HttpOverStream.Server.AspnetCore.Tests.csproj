@@ -16,6 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\HttpOverStream.NamedPipe\HttpOverStream.NamedPipe.csproj" />
     <ProjectReference Include="..\HttpOverStream.Server.AspnetCore\HttpOverStream.Server.AspnetCore.csproj" />
     <ProjectReference Include="..\HttpOverStream.Client\HttpOverStream.Client.csproj" />
     <ProjectReference Include="..\HttpOverStream\HttpOverStream.csproj" />

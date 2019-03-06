@@ -1,4 +1,5 @@
 ﻿using HttpOverStream.Client;
+using HttpOverStream.NamedPipe;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -40,69 +41,17 @@ namespace HttpOverStream.Server.AspnetCore.Tests
     }
     public class EndToEndTests
     {
-        private class TestListener : IListen
-        {
-            public TestListener(string pipeName)
-            {
-                _pipeName = pipeName;
-            }
-            private Task _listenTask;
-            private CancellationTokenSource _listenTcs;
-            private readonly string _pipeName;
-
-            public Task StartAsync(Action<Stream> onConnection, CancellationToken cancellationToken)
-            {
-                _listenTcs = new CancellationTokenSource();
-                var ct = _listenTcs.Token;
-                _listenTask = Task.Run(async () =>
-                {
-                    while (!ct.IsCancellationRequested)
-                    {
-                        var srv = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous );
-                        await srv.WaitForConnectionAsync(ct);                        
-                        onConnection(srv);
-                    }
-                });
-                return Task.CompletedTask;
-            }
-            public async Task StopAsync(CancellationToken cancellationToken)
-            {
-                _listenTcs.Cancel();
-                try
-                {
-                    await _listenTask.ConfigureAwait(false);
-                }
-                catch (OperationCanceledException) { }
-            }
-        }
-
-        private class TestDialer : IDial
-        {
-            private readonly string _pipeName;
-
-            public TestDialer(string pipeName)
-            {
-                _pipeName = pipeName;
-            }
-
-            public async ValueTask<Stream> DialAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-            {
-                var pipe = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous );
-                await pipe.ConnectAsync(0,cancellationToken).ConfigureAwait(false);
-                return pipe;
-            }
-        }
         [Fact]
         public async Task TestHelloWorld()
         {
             var builder = new WebHostBuilder().Configure(app => app.UseMvc())
                 .ConfigureServices(svc => svc.AddMvc().AddApplicationPart(Assembly.GetAssembly(typeof(EndToEndApiController))))
-                .UseServer(new CustomListenerHost(new TestListener("test-core-get")));
+                .UseServer(new CustomListenerHost(new NamedPipeListener("test-core-get")));
 
             var host = builder.Build();
             await host.StartAsync();
 
-            var client = new HttpClient(new DialMessageHandler(new TestDialer("test-core-get")));
+            var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("test-core-get")));
             var result = await client.GetStringAsync("http://localhost/api/e2e-tests/hello-world");
             Assert.Equal("Hello World", result);
 
@@ -114,12 +63,12 @@ namespace HttpOverStream.Server.AspnetCore.Tests
         {
             var builder = new WebHostBuilder().Configure(app => app.UseMvc())
                 .ConfigureServices(svc => svc.AddMvc().AddApplicationPart(Assembly.GetAssembly(typeof(EndToEndApiController))))
-                .UseServer(new CustomListenerHost(new TestListener("test-core-post")));
+                .UseServer(new CustomListenerHost(new NamedPipeListener("test-core-post")));
 
             var host = builder.Build();
             await host.StartAsync();
 
-            var client = new HttpClient(new DialMessageHandler(new TestDialer("test-core-post")));
+            var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("test-core-post")));
             var result = await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" });
             var wlcMsg = await result.Content.ReadAsAsync<WelcomeMessage>();
             Assert.Equal("Hello Test", wlcMsg.Text);
