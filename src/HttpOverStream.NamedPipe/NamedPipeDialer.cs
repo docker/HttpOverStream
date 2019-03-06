@@ -15,7 +15,7 @@ namespace HttpOverStream.NamedPipe
         private readonly int _timeout;
 
         public NamedPipeDialer(string pipeName) 
-            : this(pipeName, ".", PipeDirection.InOut, PipeOptions.Asynchronous | PipeOptions.WriteThrough, 0)
+            : this(pipeName, ".", PipeDirection.InOut, PipeOptions.Asynchronous, 0)
         {
         }
         public NamedPipeDialer(string pipeName, string serverName, PipeDirection pipeDirection, PipeOptions pipeOptions, int timeout)
