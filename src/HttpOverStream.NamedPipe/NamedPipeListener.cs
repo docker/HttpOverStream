@@ -16,7 +16,7 @@ namespace HttpOverStream.NamedPipe
         private readonly int _maxAllowedServerInstances;
 
         public NamedPipeListener(string pipeName)
-            : this(pipeName, PipeOptions.Asynchronous, PipeTransmissionMode.Byte, 0)
+            : this(pipeName, PipeOptions.Asynchronous, PipeTransmissionMode.Byte, NamedPipeServerStream.MaxAllowedServerInstances)
         {
         }
         public NamedPipeListener(string pipeName, PipeOptions pipeOptions, PipeTransmissionMode pipeTransmissionMode, int maxAllowedServerInstances)
