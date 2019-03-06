@@ -11,19 +11,17 @@ namespace HttpOverStream.NamedPipe
         private Task _listenTask;
         private CancellationTokenSource _listenTcs;
         private readonly string _pipeName;
-        private readonly PipeDirection _pipeDirection;
         private readonly PipeOptions _pipeOptions;
         private readonly PipeTransmissionMode _pipeTransmissionMode;
         private readonly int _maxAllowedServerInstances;
 
         public NamedPipeListener(string pipeName)
-            : this(pipeName, PipeDirection.InOut, PipeOptions.Asynchronous, PipeTransmissionMode.Byte, 0)
+            : this(pipeName, PipeOptions.Asynchronous, PipeTransmissionMode.Byte, 0)
         {
         }
-        public NamedPipeListener(string pipeName, PipeDirection pipeDirection, PipeOptions pipeOptions, PipeTransmissionMode pipeTransmissionMode, int maxAllowedServerInstances)
+        public NamedPipeListener(string pipeName, PipeOptions pipeOptions, PipeTransmissionMode pipeTransmissionMode, int maxAllowedServerInstances)
         {
             _pipeName = pipeName;
-            _pipeDirection = pipeDirection;
             _pipeOptions = pipeOptions;
             _pipeTransmissionMode = pipeTransmissionMode;
             _maxAllowedServerInstances = maxAllowedServerInstances;
@@ -38,7 +36,7 @@ namespace HttpOverStream.NamedPipe
             {
                 while (!ct.IsCancellationRequested)
                 {
-                    var srv = new NamedPipeServerStream(_pipeName, _pipeDirection, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions);
+                    var srv = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions);
                     await srv.WaitForConnectionAsync(ct);
                     onConnection(srv);
                 }
