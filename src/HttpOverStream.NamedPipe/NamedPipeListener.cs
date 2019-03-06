@@ -29,7 +29,6 @@ namespace HttpOverStream.NamedPipe
 
         public Task StartAsync(Action<Stream> onConnection, CancellationToken cancellationToken)
         {
-            // TODO: use the parameter cancellationToken
             _listenTcs = new CancellationTokenSource();
             var ct = _listenTcs.Token;
             _listenTask = Task.Run(async () =>
