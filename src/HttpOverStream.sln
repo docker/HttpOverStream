@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.28606.126
+# Visual Studio 15
+VisualStudioVersion = 15.0.28307.329
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HttpOverStream", "HttpOverStream\HttpOverStream.csproj", "{8E94720F-04F5-4734-AC2D-E14D208AF59E}"
 EndProject
@@ -16,6 +16,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpOverStream.Server.Owin.Tests", "HttpOverStream.Server.Owin.Tests\HttpOverStream.Server.Owin.Tests.csproj", "{96388CE9-B97A-4754-A3B3-C898CD195969}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "HttpOverStream.Server.AspnetCore.Tests", "HttpOverStream.Server.AspnetCore.Tests\HttpOverStream.Server.AspnetCore.Tests.csproj", "{1E08ABEF-6BDF-4B01-87D4-2188227ACD63}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HttpOverStream.NamedPipe", "HttpOverStream.NamedPipe\HttpOverStream.NamedPipe.csproj", "{03090A81-4647-47BC-93BE-49D36484C94C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -51,6 +53,10 @@ Global
 		{1E08ABEF-6BDF-4B01-87D4-2188227ACD63}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{1E08ABEF-6BDF-4B01-87D4-2188227ACD63}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{1E08ABEF-6BDF-4B01-87D4-2188227ACD63}.Release|Any CPU.Build.0 = Release|Any CPU
+		{03090A81-4647-47BC-93BE-49D36484C94C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{03090A81-4647-47BC-93BE-49D36484C94C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{03090A81-4647-47BC-93BE-49D36484C94C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{03090A81-4647-47BC-93BE-49D36484C94C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
