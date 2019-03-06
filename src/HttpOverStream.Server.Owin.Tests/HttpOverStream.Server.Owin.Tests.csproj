@@ -88,6 +88,10 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\HttpOverStream.NamedPipe\HttpOverStream.NamedPipe.csproj">
+      <Project>{03090A81-4647-47BC-93BE-49D36484C94C}</Project>
+      <Name>HttpOverStream.NamedPipe</Name>
+    </ProjectReference>
     <ProjectReference Include="..\HttpOverStream\HttpOverStream.csproj">
       <Project>{8e94720f-04f5-4734-ac2d-e14d208af59e}</Project>
       <Name>HttpOverStream</Name>
@@ -111,5 +115,6 @@
     <Error Condition="!Exists('..\packages\MSTest.TestAdapter.1.3.2\build\net45\MSTest.TestAdapter.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\MSTest.TestAdapter.1.3.2\build\net45\MSTest.TestAdapter.targets'))" />
   </Target>
   <Import Project="..\packages\MSTest.TestAdapter.1.3.2\build\net45\MSTest.TestAdapter.targets" Condition="Exists('..\packages\MSTest.TestAdapter.1.3.2\build\net45\MSTest.TestAdapter.targets')" />
-  <Target Name="pack"></Target>
+  <Target Name="pack">
+  </Target>
 </Project>
