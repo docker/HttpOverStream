@@ -6,7 +6,6 @@ using Owin;
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Pipes;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -21,18 +20,27 @@ namespace HttpOverStream.Server.Owin.Tests
     {
         [Route("hello-world")]
         [HttpGet()]
-        public string HelloWorld()
+        public string GetHelloWorld()
         {
             return "Hello World";
         }
 
         [Route("hello")]
         [HttpPost()]
-        public WelcomeMessage Hello([FromBody] PersonMessage person)
+        public WelcomeMessage PostHello([FromBody] PersonMessage person)
         {
             return new WelcomeMessage { Text = $"Hello {person.Name}" };
         }
+
+        [Route("timeout")]
+        [HttpGet()]
+        public async Task<string> GetTimeoutAsync()
+        {
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            return "This should have timed out.";
+        }
     }
+
     public class PersonMessage
     {
         public string Name { get; set; }
@@ -49,18 +57,25 @@ namespace HttpOverStream.Server.Owin.Tests
         [TestMethod]
         public async Task TestGet()
         {
-            using (CustomListenerHost.Start(app =>
-            {
-                HttpConfiguration config = new HttpConfiguration();
-                config.MapHttpAttributeRoutes();
-                config.SuppressDefaultHostAuthentication();
-                config.SuppressHostPrincipal();
-                app.UseWebApi(config);
-            }, new NamedPipeListener("legacy_test_get")))
+            using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener("legacy_test_get")))
             {
                 var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("legacy_test_get")));
                 var result = await client.GetAsync("http://localhost/api/e2e-tests/hello-world");
                 Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
+            }
+        }
+
+        [TestMethod]
+        public async Task TestServerTimeout()
+        {
+            using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener("legacy_test_get")))
+            {
+                var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("legacy_test_get")));
+                client.Timeout = TimeSpan.FromMilliseconds(100);
+                await Assert.ThrowsExceptionAsync<TaskCanceledException>(async () =>
+                {
+                    await client.GetAsync("http://localhost/api/e2e-tests/timeout");
+                });
             }
         }
 
@@ -92,31 +107,12 @@ namespace HttpOverStream.Server.Owin.Tests
         [TestMethod]
         public async Task TestPost()
         {
-            using (CustomListenerHost.Start(app =>
-            {
-                HttpConfiguration config = new HttpConfiguration();
-                config.MapHttpAttributeRoutes();
-                config.SuppressDefaultHostAuthentication();
-                config.SuppressHostPrincipal();
-                app.UseWebApi(config);
-            }, new NamedPipeListener("legacy_test_post")))
+            using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener("legacy_test_post")))
             {
                 var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("legacy_test_post")));
                 var result = await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" });
                 var wlcMsg = await result.Content.ReadAsAsync<WelcomeMessage>();
                 Assert.AreEqual("Hello Test", wlcMsg.Text);
-            }
-        }
-
-        class TestLoggerFactory : ILoggerFactory, ILogger
-        {
-            public TaskCompletionSource<Exception> ExceptionReceived { get; private set; } = new TaskCompletionSource<Exception>();
-            public ILogger Create(string name) => this;
-            
-            public bool WriteCore(TraceEventType eventType, int eventId, object state, Exception exception, Func<object, Exception, string> formatter)
-            {
-                ExceptionReceived.TrySetResult(exception);
-                return true;
             }
         }
 
@@ -126,16 +122,12 @@ namespace HttpOverStream.Server.Owin.Tests
             var logFactory = new TestLoggerFactory();
             using (CustomListenerHost.Start(app =>
             {
-                HttpConfiguration config = new HttpConfiguration();
-                config.MapHttpAttributeRoutes();
-                config.SuppressDefaultHostAuthentication();
-                config.SuppressHostPrincipal();
-                app.UseWebApi(config);
-                app.SetLoggerFactory(logFactory);                
+                SetupDefaultAppBuilder(app);
+                app.SetLoggerFactory(logFactory);
             }, new NamedPipeListener("test_stream_interuption")))
             {
                 var dialer = new NamedPipeDialer("test_stream_interuption");
-                using(var fuzzyStream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None))
+                using (var fuzzyStream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None))
                 {
                     // just write the first line of a valid http request, and drop the connection
                     var payload = Encoding.ASCII.GetBytes("GET /docs/index.html HTTP/1.0\n");
@@ -147,6 +139,27 @@ namespace HttpOverStream.Server.Owin.Tests
                 var result = await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" });
                 var wlcMsg = await result.Content.ReadAsAsync<WelcomeMessage>();
                 Assert.AreEqual("Hello Test", wlcMsg.Text);
+            }
+        }
+
+        private static void SetupDefaultAppBuilder(IAppBuilder appBuilder)
+        {
+            HttpConfiguration config = new HttpConfiguration();
+            config.MapHttpAttributeRoutes();
+            config.SuppressDefaultHostAuthentication();
+            config.SuppressHostPrincipal();
+            appBuilder.UseWebApi(config);
+        }
+
+        class TestLoggerFactory : ILoggerFactory, ILogger
+        {
+            public TaskCompletionSource<Exception> ExceptionReceived { get; private set; } = new TaskCompletionSource<Exception>();
+            public ILogger Create(string name) => this;
+            
+            public bool WriteCore(TraceEventType eventType, int eventId, object state, Exception exception, Func<object, Exception, string> formatter)
+            {
+                ExceptionReceived.TrySetResult(exception);
+                return true;
             }
         }
     }
