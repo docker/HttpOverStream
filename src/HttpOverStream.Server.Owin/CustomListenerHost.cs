@@ -42,14 +42,14 @@ namespace HttpOverStream.Server.Owin
                 {
                     var owinContext = new OwinContext();
                     owinContext.Set("owin.Version", "1.0");
-                    await PopulateRequestAsync(stream, owinContext.Request).ConfigureAwait(false);
+                    await PopulateRequestAsync(stream, owinContext.Request, CancellationToken.None).ConfigureAwait(false);
                     var body = new MemoryStream();
                     owinContext.Response.Body = body;
                     // execute higher level middleware
                     await _app(owinContext.Environment).ConfigureAwait(false);
                     // write the response
                     await body.FlushAsync().ConfigureAwait(false);
-                    await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);
+                    await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
                     body.Position = 0;
                     await body.CopyToAsync(stream).ConfigureAwait(false);
                     await stream.FlushAsync().ConfigureAwait(false);
@@ -63,9 +63,9 @@ namespace HttpOverStream.Server.Owin
 
         static Uri _localhostUri = new Uri("http://localhost/");
 
-        private async Task PopulateRequestAsync(Stream stream, IOwinRequest request)
+        private async Task PopulateRequestAsync(Stream stream, IOwinRequest request, CancellationToken cancellationToken)
         {
-            var firstLine = await stream.ReadLineAsync().ConfigureAwait(false);
+            var firstLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             var parts = firstLine.Split(' ');
             if (parts.Length < 3)
             {
@@ -80,7 +80,7 @@ namespace HttpOverStream.Server.Owin
             }
             for (; ; )
             {
-                var line = await stream.ReadLineAsync().ConfigureAwait(false);
+                var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                 if (line.Length == 0)
                 {
                     break;

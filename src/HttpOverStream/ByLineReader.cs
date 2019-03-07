@@ -1,20 +1,21 @@
 ﻿using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace HttpOverStream
 {
     public static class ByLineReader
     {
-        public static async ValueTask<string> ReadLineAsync(this Stream stream)
+        public static async ValueTask<string> ReadLineAsync(this Stream stream, CancellationToken cancellationToken)
         {
             var bytes = new List<byte>();
             var buffer = new byte[1];
             const byte lineSeparator = (byte)'\n';
             for(; ; )
             {
-                var read = await stream.ReadAsync(buffer, 0, 1).ConfigureAwait(false);
+                var read = await stream.ReadAsync(buffer, 0, 1, cancellationToken).ConfigureAwait(false);
                 if (read == 0)
                 {
                     // EOF -> throw
