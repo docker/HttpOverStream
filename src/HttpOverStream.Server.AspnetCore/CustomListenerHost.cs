@@ -41,7 +41,7 @@ namespace HttpOverStream.Server.AspnetCore
                 using (stream)
                 {
                     var httpCtx = new DefaultHttpContext();
-                    var requestFeature = await CreateRequestAsync(stream).ConfigureAwait(false);
+                    var requestFeature = await CreateRequestAsync(stream, CancellationToken.None).ConfigureAwait(false);
                     httpCtx.Features.Set<IHttpRequestFeature>(requestFeature);
                     var responseFeature = new HttpResponseFeature();
                     httpCtx.Features.Set<IHttpResponseFeature>(responseFeature);
@@ -49,7 +49,7 @@ namespace HttpOverStream.Server.AspnetCore
                     var body = new MemoryStream();
                     responseFeature.Body = body;
                     await application.ProcessRequestAsync(ctx).ConfigureAwait(false);
-                    await stream.WriteResponseStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value))).ConfigureAwait(false);                    
+                    await stream.WriteResponseStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);                    
                     body.Position = 0;
                     await body.CopyToAsync(stream).ConfigureAwait(false);
                     await stream.FlushAsync().ConfigureAwait(false);
@@ -62,9 +62,9 @@ namespace HttpOverStream.Server.AspnetCore
         }
         static Uri _localhostUri = new Uri("http://localhost/");
 
-        async Task<HttpRequestFeature> CreateRequestAsync(Stream stream)
+        async Task<HttpRequestFeature> CreateRequestAsync(Stream stream, CancellationToken cancellationToken)
         {
-            var firstLine = await stream.ReadLineAsync().ConfigureAwait(false);
+            var firstLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
             var parts = firstLine.Split(' ');
             var result = new HttpRequestFeature();
 
@@ -77,7 +77,7 @@ namespace HttpOverStream.Server.AspnetCore
             result.Protocol = parts[2];
             for(; ; )
             {
-                var line = await stream.ReadLineAsync().ConfigureAwait(false);
+                var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                 if(line.Length == 0)
                 {
                     break;

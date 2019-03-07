@@ -36,7 +36,7 @@ namespace HttpOverStream.Server.Owin.Tests
         [HttpGet()]
         public async Task<string> GetTimeoutAsync()
         {
-            await Task.Delay(TimeSpan.FromSeconds(1));
+            await Task.Delay(TimeSpan.FromSeconds(3));
             return "This should have timed out.";
         }
     }
@@ -71,7 +71,7 @@ namespace HttpOverStream.Server.Owin.Tests
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener("legacy_test_get")))
             {
                 var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer("legacy_test_get")));
-                client.Timeout = TimeSpan.FromMilliseconds(100);
+                client.Timeout = TimeSpan.FromSeconds(1);
                 await Assert.ThrowsExceptionAsync<TaskCanceledException>(async () =>
                 {
                     await client.GetAsync("http://localhost/api/e2e-tests/timeout");
