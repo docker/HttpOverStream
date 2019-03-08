@@ -70,7 +70,7 @@ namespace HttpOverStream.Client
             {
                 await request.Content.CopyToAsync(stream).ConfigureAwait(false);
             }
-            await stream.FlushAsync().ConfigureAwait(false);
+            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             var responseContent = new DialResponseContent();
             var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
