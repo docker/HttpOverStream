@@ -65,19 +65,20 @@ namespace HttpOverStream.Client
             var stream = await _dial.DialAsync(request, cancellationToken).ConfigureAwait(false);
 
             request.Properties.Add(UnderlyingStreamProperty, stream);
-            await stream.WriteMethodAndHeadersAsync(request).ConfigureAwait(false);
+            await stream.WriteMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
             if (request.Content != null)
             {
                 await request.Content.CopyToAsync(stream).ConfigureAwait(false);
             }
-            await stream.FlushAsync().ConfigureAwait(false);
+            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
 
             var responseContent = new DialResponseContent();
             var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
-            ParseStatusLine(response, await stream.ReadLineAsync().ConfigureAwait(false));
+            string statusLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+            ParseStatusLine(response, statusLine);
             for (; ; )
             {
-                var line = await stream.ReadLineAsync().ConfigureAwait(false);
+                var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                 if (line.Length == 0)
                 {
                     break;
