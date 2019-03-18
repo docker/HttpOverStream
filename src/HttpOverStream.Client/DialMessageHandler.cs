@@ -62,6 +62,7 @@ namespace HttpOverStream.Client
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             ValidateAndNormalizeRequest(request);
+
             var stream = await _dial.DialAsync(request, cancellationToken).ConfigureAwait(false);
 
             request.Properties.Add(UnderlyingStreamProperty, stream);
@@ -152,7 +153,5 @@ namespace HttpOverStream.Client
                 request.Headers.ExpectContinue = false;
             }
         }
-
-
     }
 }

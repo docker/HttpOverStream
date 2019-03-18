@@ -14,7 +14,6 @@ using System.Web.Http;
 
 namespace HttpOverStream.Server.Owin.Tests
 {
-
     [RoutePrefix("api/e2e-tests")]
     public class EndToEndApiController : ApiController
     {
@@ -38,7 +37,7 @@ namespace HttpOverStream.Server.Owin.Tests
         {
             await Task.Delay(TimeSpan.FromSeconds(5));
             return "This should have timed out.";
-        }
+    }
     }
 
     public class PersonMessage
@@ -59,6 +58,20 @@ namespace HttpOverStream.Server.Owin.Tests
         [TestMethod]
         public async Task TestGet()
         {
+            await TestGet_Impl();
+        }
+
+        [TestMethod]
+        public async Task TestGetStressTest()
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                await TestGet_Impl();
+            }
+        }
+
+        private async Task TestGet_Impl()
+        {
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
                 var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
@@ -70,13 +83,34 @@ namespace HttpOverStream.Server.Owin.Tests
         [TestMethod]
         public async Task TestBodyStream()
         {
+            await TestBodyStream_Impl();
+        }
+
+        [TestMethod]
+        public async Task TestBodyStreamStressTest()
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                await TestBodyStream_Impl();
+            }
+        }
+
+        private async Task TestBodyStream_Impl()
+        {
             var listener = new NamedPipeListener(TestContext.TestName);
             var payload = Encoding.UTF8.GetBytes("Hello world");
             await listener.StartAsync(con =>
             {
                 Task.Run(async () =>
                 {
-                    await con.WriteAsync(payload, 0, payload.Length);
+                    try
+                    {
+                        await con.WriteAsync(payload, 0, payload.Length);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.WriteLine("... WriteAsync exception:" + e.Message);
+                    }
                 });
             }, CancellationToken.None);
 
@@ -90,10 +124,26 @@ namespace HttpOverStream.Server.Owin.Tests
             read = await bodyStream.ReadAsync(data, 0, data.Length);
             Assert.AreEqual(0, read);
 
+            // Clean up
+            await listener.StopAsync(CancellationToken.None);
         }
 
         [TestMethod]
         public async Task TestPost()
+        {
+            await TestPost_Impl();
+        }
+
+        [TestMethod]
+        public async Task TestPostStressTest()
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                await TestPost_Impl();
+            }
+        }
+
+        private async Task TestPost_Impl()
         {
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
@@ -107,16 +157,29 @@ namespace HttpOverStream.Server.Owin.Tests
         [TestMethod]
         public async Task TestStreamInteruption()
         {
+            await TestStreamInterruption_Impl();
+        }
+
+        [TestMethod]
+        public async Task TestStreamInteruptionStressTest()
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                await TestStreamInterruption_Impl();
+            }
+        }
+
+        private async Task TestStreamInterruption_Impl()
+        {
             var logFactory = new TestLoggerFactory();
             using (CustomListenerHost.Start(app =>
-                                    {
-                                        SetupDefaultAppBuilder(app);
-                                        app.SetLoggerFactory(logFactory);
-                                    }, new NamedPipeListener(TestContext.TestName)))
+            {
+                SetupDefaultAppBuilder(app);
+                app.SetLoggerFactory(logFactory);
+            }, new NamedPipeListener(TestContext.TestName)))
             {
                 var dialer = new NamedPipeDialer(TestContext.TestName);
-                var fuzzyStream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None);
-                using (fuzzyStream)
+                using (var fuzzyStream = await dialer.DialAsync(new HttpRequestMessage(), CancellationToken.None))
                 {
                     // just write the first line of a valid http request, and drop the connection
                     var payload = Encoding.ASCII.GetBytes("GET /docs/index.html HTTP/1.0\n");

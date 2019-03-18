@@ -43,19 +43,25 @@ namespace HttpOverStream.Server.Owin
                     var owinContext = new OwinContext();
                     owinContext.Set("owin.Version", "1.0");
                     await PopulateRequestAsync(stream, owinContext.Request, CancellationToken.None).ConfigureAwait(false);
-                    var body = new MemoryStream();
-                    owinContext.Response.Body = body;
-                    // execute higher level middleware
-                    await _app(owinContext.Environment).ConfigureAwait(false);
-                    // write the response
-                    await body.FlushAsync().ConfigureAwait(false);
-                    await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
-                    body.Position = 0;
-                    await body.CopyToAsync(stream).ConfigureAwait(false);
-                    await stream.FlushAsync().ConfigureAwait(false);
+                    using (var body = new MemoryStream())
+                    {
+                        owinContext.Response.Body = body;
+                        // execute higher level middleware
+                        await _app(owinContext.Environment).ConfigureAwait(false);
+                        // write the response
+                        await body.FlushAsync().ConfigureAwait(false);
+                        await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
+                        body.Position = 0;
+                        await body.CopyToAsync(stream).ConfigureAwait(false);
+                        await stream.FlushAsync().ConfigureAwait(false);
+                    }
                 }
             }
-            catch(Exception e)
+            catch (EndOfStreamException e)
+            {
+                _logger?.WriteWarning("Error handling client stream, (Client disconnected early / invalid HTTP request)", e);
+            }
+            catch (Exception e)
             {
                 _logger?.WriteWarning("error handling client stream", e);
             }
@@ -146,6 +152,7 @@ namespace HttpOverStream.Server.Owin
             {
                 _listener = listener;
             }
+
             public IDisposable Create(Func<IDictionary<string, object>, Task> app, IDictionary<string, object> properties)
             {
                 var host = new CustomListenerHost(_listener, app, _builder);
