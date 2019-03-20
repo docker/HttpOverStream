@@ -27,9 +27,13 @@ namespace HttpOverStream.NamedPipe
 
         public async ValueTask<Stream> DialAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            var pipe = new NamedPipeClientStream(_serverName, _pipeName, PipeDirection.InOut, _pipeOptions);
-            await pipe.ConnectAsync(_timeout, cancellationToken).ConfigureAwait(false);
-            return pipe;
+            var pipeStream = new NamedPipeClientStream(_serverName, _pipeName, PipeDirection.InOut, _pipeOptions);
+            await pipeStream.ConnectAsync(_timeout, cancellationToken).ConfigureAwait(false);
+            if (cancellationToken.CanBeCanceled)
+            {
+                var registration = cancellationToken.Register(() => pipeStream.Dispose());
+            }
+            return pipeStream;
         }
     }
 }
