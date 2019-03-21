@@ -11,6 +11,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace HttpOverStream.Server.Owin
 {
@@ -42,27 +43,39 @@ namespace HttpOverStream.Server.Owin
                 {
                     var owinContext = new OwinContext();
                     owinContext.Set("owin.Version", "1.0");
+                    Debug.WriteLine("Server: reading message..");
                     await PopulateRequestAsync(stream, owinContext.Request, CancellationToken.None).ConfigureAwait(false);
+                    Debug.WriteLine("Server: finished reading message");
                     using (var body = new MemoryStream())
                     {
                         owinContext.Response.Body = body;
                         // execute higher level middleware
+                        Debug.WriteLine("Server: executing middleware..");
                         await _app(owinContext.Environment).ConfigureAwait(false);
+                        Debug.WriteLine("Server: finished executing middleware..");
                         // write the response
                         await body.FlushAsync().ConfigureAwait(false);
-                        await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, owinContext.Response.StatusCode.ToString(), owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
+                        Debug.WriteLine("Server: flushed.");
+                        string statusCode = owinContext.Response.StatusCode.ToString();
+                        Debug.WriteLine("Server: Statuscode was " + statusCode);
+                        await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, statusCode, owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
+                        Debug.WriteLine("Server: Wrote status and headers.");
                         body.Position = 0;
                         await body.CopyToAsync(stream).ConfigureAwait(false);
+                        Debug.WriteLine("Server: CopyToAsync.");
                         await stream.FlushAsync().ConfigureAwait(false);
+                        Debug.WriteLine("Server: Flush 2.");
                     }
                 }
             }
             catch (EndOfStreamException e)
             {
+                Debug.WriteLine("Server: Error handling client stream, (Client disconnected early / invalid HTTP request)");
                 _logger?.WriteWarning("Error handling client stream, (Client disconnected early / invalid HTTP request)", e);
             }
             catch (Exception e)
             {
+                Debug.WriteLine("Server: Error handling client stream " + e);
                 _logger?.WriteWarning("error handling client stream", e);
             }
         }

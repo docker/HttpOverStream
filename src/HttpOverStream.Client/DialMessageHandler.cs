@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.IO;
 using System.Net;
 using System.Net.Http;
@@ -62,43 +63,78 @@ namespace HttpOverStream.Client
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             ValidateAndNormalizeRequest(request);
-
-            var stream = await _dial.DialAsync(request, cancellationToken).ConfigureAwait(false);
-
-            request.Properties.Add(UnderlyingStreamProperty, stream);
-            await stream.WriteMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
-            if (request.Content != null)
+            Stream stream = null;
+            try
             {
-                await request.Content.CopyToAsync(stream).ConfigureAwait(false);
-            }
-            await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                Debug.WriteLine("Client: About to connect");
+                stream = await _dial.DialAsync(request, cancellationToken).ConfigureAwait(false);
 
-            var responseContent = new DialResponseContent();
-            var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
-            string statusLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-            ParseStatusLine(response, statusLine);
-            for (; ; )
-            {
-                var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-                if (line.Length == 0)
-                {
-                    break;
-                }
-                try
-                {
-                    (var name, var value) = HttpParser.ParseHeaderNameValues(line);
-                    if(!response.Headers.TryAddWithoutValidation(name, value))
+                Debug.WriteLine("Client: Connected");
+                request.Properties.Add(UnderlyingStreamProperty, stream);
+
+                Debug.WriteLine("Client: Writing request");
+                await stream.WriteMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
+
+                // as soon as headers are sent, we should begin reading the response, and send the request body concurrently
+                // This is because if the server 404s nothing will ever read the response and it'll hang waiting
+                // for someone to read it
+
+                var writeContentCTS = new CancellationTokenSource();
+                var writeContentToken = writeContentCTS.Token;
+                cancellationToken.Register(() => writeContentCTS.Cancel());
+                var writeContentTask = Task.Run(async () => // Cancel this task if server response detected
                     {
-                        response.Content.Headers.TryAddWithoutValidation(name, value);
+                        if (request.Content != null)
+                        {
+                            Debug.WriteLine("Client: Writing request request.Content.CopyToAsync");
+                            await request.Content.CopyToAsync(stream).ConfigureAwait(false);
+                        }
+                        Debug.WriteLine("Client:  stream.FlushAsync");
+                        await stream.FlushAsync(writeContentToken).ConfigureAwait(false);
+                        Debug.WriteLine("Client: Finished writing request");
+                    }, writeContentToken);
+
+                var responseContent = new DialResponseContent();
+                var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
+
+                Debug.WriteLine("Client: Waiting for response");
+                string statusLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                writeContentCTS.Cancel();
+                Debug.WriteLine("Client: Read 1st response line");
+                ParseStatusLine(response, statusLine);
+                Debug.WriteLine("Client: ParseStatusLine");
+                for (; ; )
+                {
+                    var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
+                    if (line.Length == 0)
+                    {
+                        Debug.WriteLine("Client: Found empty line, end of response");
+                        break;
+                    }
+                    try
+                {
+                    Debug.WriteLine("Client: Parsing line:" + line);
+                    (var name, var value) = HttpParser.ParseHeaderNameValues(line);
+                        if (!response.Headers.TryAddWithoutValidation(name, value))
+                        {
+                            response.Content.Headers.TryAddWithoutValidation(name, value);
+                        }
+                    }
+                    catch (FormatException ex)
+                    {
+                        throw new HttpRequestException("Error parsing header", ex);
                     }
                 }
-                catch (FormatException ex)
-                {
-                    throw new HttpRequestException("Error parsing header", ex);
-                }
+                Debug.WriteLine("Client: Finished reading response lines");
+                responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd: true), response.Content.Headers.ContentLength);
+                return response;
             }
-            responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd:true), response.Content.Headers.ContentLength);
-            return response;
+            catch(Exception e)
+            {
+                Debug.WriteLine("Client: EXCEPTION:" + e);
+                stream?.Dispose();
+                throw;
+            }
         }
 
         private void ParseStatusLine(HttpResponseMessage response, string line)

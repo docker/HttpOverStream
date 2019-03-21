@@ -44,15 +44,16 @@ namespace HttpOverStream.NamedPipe
             var tasks = new List<Task>();
 
             // We block on creating the dummy server/client to ensure we definitely have that set up before doing anything else
-            var dummyClient = ConnectDummyClientAndServer(cancellationToken);
-            tasks.Add(Task.Run(() => WaitForCancellationThenDispose(dummyClient, cancellationToken)));
+            var (dummyClient, dummyServer) = ConnectDummyClientAndServer(cancellationToken);
+            tasks.Add(Task.Run(() => DisposeWhenCancelled(dummyClient, cancellationToken)));
+            tasks.Add(Task.Run(() => DisposeWhenCancelled(dummyServer, cancellationToken)));
 
             // This runs synchronously until we've created the first server listener to ensure we can handle at least the first client connection
             var listenTask = CreateServerStreamAndListen(onConnection, cancellationToken);
             tasks.Add(listenTask);
 
             // We don't technically need more than 1 thread but its faster
-            for (int i = 0; i < _numServerThreads-1; i++)
+            for (int i = 0; i < _numServerThreads - 1; i++)
             {
                 tasks.Add(Task.Run(() => CreateServerStreamAndListen(onConnection, cancellationToken)));
             }
@@ -118,7 +119,7 @@ namespace HttpOverStream.NamedPipe
             }
         }
 
-        private NamedPipeClientStream ConnectDummyClientAndServer(CancellationToken cancellationToken)
+        private (NamedPipeClientStream, NamedPipeServerStream) ConnectDummyClientAndServer(CancellationToken cancellationToken)
         {
             // Always have another stream active so if HandleStream finishes really quickly theres
             // no chance of the named pipe being removed altogether.
@@ -128,11 +129,10 @@ namespace HttpOverStream.NamedPipe
             var dummyClientStream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             dummyClientStream.Connect(100); // 100ms timeout to connect to itself
 
-            // We only need to return the client - Server will cancel + dispose itself via the token
-            return dummyClientStream;
+            return (dummyClientStream, serverStream);
         }
 
-        private async Task WaitForCancellationThenDispose(IDisposable disposable, CancellationToken cancellationToken)
+        private async Task DisposeWhenCancelled(IDisposable disposable, CancellationToken cancellationToken)
         {
             await cancellationToken.WhenCanceled().ConfigureAwait(false);
 
