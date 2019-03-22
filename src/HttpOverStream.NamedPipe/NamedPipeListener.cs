@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -55,7 +56,7 @@ namespace HttpOverStream.NamedPipe
             // We don't technically need more than 1 thread but its faster
             for (int i = 0; i < _numServerThreads - 1; i++)
             {
-                tasks.Add(Task.Run(() => CreateServerStreamAndListen(onConnection, cancellationToken)));
+                tasks.Add(Task.Run(() => CreateServerStreamAndListen(onConnection, cancellationToken), cancellationToken));
             }
 
             return Task.WhenAll(tasks);
@@ -64,7 +65,15 @@ namespace HttpOverStream.NamedPipe
         // We dont use the cancellation token but others might
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            _listenTcs.Cancel();
+            try
+            {
+                _listenTcs.Cancel();
+            }
+            catch (AggregateException a) when (a.InnerExceptions.All(e => e is ObjectDisposedException))
+            {
+                // NamedPipe cancellations can throw ObjectNotDisposedException
+                // They will be grouped in an AggregateException and this shouldnt break
+            }
             try
             {
                 await _listenTask.ConfigureAwait(false);

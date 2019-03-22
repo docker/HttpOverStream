@@ -76,15 +76,33 @@ namespace HttpOverStream.Server.Owin.Tests
                 }
             }
         }
+        [TestMethod]
+        public async Task TestGetStressTest_SingleServer()
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                await TestGet_Impl(100);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
 
-        private async Task TestGet_Impl()
+                if (Debug.Listeners.Count > 1)
+                {
+                    Debug.Listeners.RemoveAt(1);
+                }
+            }
+        }
+
+        private async Task TestGet_Impl(int numberOfRequests = 1)
         {
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
-                var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
-                client.Timeout = TimeSpan.FromSeconds(5);
-                var result = await client.GetAsync("http://localhost/api/e2e-tests/hello-world");
-                Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
+                for (int i = 0; i < numberOfRequests; i++)
+                {
+                    var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
+                    client.Timeout = TimeSpan.FromSeconds(5);
+                    var result = await client.GetAsync("http://localhost/api/e2e-tests/hello-world");
+                    Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
+                }
             }
         }
 
@@ -94,7 +112,6 @@ namespace HttpOverStream.Server.Owin.Tests
             for (int i = 0; i < 5; i++)
             {
                 await TestBadRequest_BadMediaType_Impl();
-                await Task.Delay(TimeSpan.FromSeconds(50));
             }
         }
 
@@ -131,7 +148,6 @@ namespace HttpOverStream.Server.Owin.Tests
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
                 var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
-                //client.Timeout = TimeSpan.FromSeconds(1);
                 try
                 {
                     var badContent = new StringContent("{ }");
@@ -277,7 +293,7 @@ namespace HttpOverStream.Server.Owin.Tests
                     await client.GetAsync("http://localhost/api/e2e-tests/timeout");
                 });
                 sw.Stop();
-                Assert.IsTrue(sw.ElapsedMilliseconds < 1000, $"GetAsync took too long ({sw.ElapsedMilliseconds} ms)");
+                Assert.IsTrue(sw.ElapsedMilliseconds < 1000, $"Client Timeout wasn't respected - GetAsync took too long ({sw.ElapsedMilliseconds} ms)");
             }
         }
 
