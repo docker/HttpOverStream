@@ -78,8 +78,6 @@ namespace HttpOverStream.Client
                 // as soon as headers are sent, we should begin reading the response, and send the request body concurrently
                 // This is because if the server 404s nothing will ever read the response and it'll hang waiting
                 // for someone to read it
-                var writeContentCTS = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                var writeContentToken = writeContentCTS.Token;
                 var writeContentTask = Task.Run(async () => // Cancel this task if server response detected
                     {
                         if (request.Content != null)
@@ -88,9 +86,9 @@ namespace HttpOverStream.Client
                             await request.Content.CopyToAsync(stream).ConfigureAwait(false);
                         }
                         Debug.WriteLine("Client:  stream.FlushAsync");
-                        await stream.FlushAsync(writeContentToken).ConfigureAwait(false);
+                        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                         Debug.WriteLine("Client: Finished writing request");
-                    }, writeContentToken);
+                    }, cancellationToken);
 
                 var responseContent = new DialResponseContent();
                 var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
@@ -124,7 +122,6 @@ namespace HttpOverStream.Client
                 }
                 Debug.WriteLine("Client: Finished reading response header lines");
                 responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd: true), response.Content.Headers.ContentLength);
-                writeContentCTS.Cancel();
                 return response;
             }
             catch(Exception e)
