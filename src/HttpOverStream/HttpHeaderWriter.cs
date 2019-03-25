@@ -32,9 +32,7 @@ namespace HttpOverStream
                 var separator = header.Key == "Server" ? " " : ", ";
                 var values = string.Join(separator, header.Value);
                 var line = $"{header.Key}: {values}\n";
-                //var line = $"{header.Key}: {values}\n".Substring(0, 5) + "\n"; // TODO: REMOVE SUBSTRING
                 var payload = Encoding.ASCII.GetBytes(line);
-                //await stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
                 await stream.WriteAsync(payload, 0, payload.Length, cancellationToken).ConfigureAwait(false);
             }
         }

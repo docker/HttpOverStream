@@ -78,10 +78,8 @@ namespace HttpOverStream.Client
                 // as soon as headers are sent, we should begin reading the response, and send the request body concurrently
                 // This is because if the server 404s nothing will ever read the response and it'll hang waiting
                 // for someone to read it
-
-                var writeContentCTS = new CancellationTokenSource();
+                var writeContentCTS = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 var writeContentToken = writeContentCTS.Token;
-                cancellationToken.Register(() => writeContentCTS.Cancel());
                 var writeContentTask = Task.Run(async () => // Cancel this task if server response detected
                     {
                         if (request.Content != null)
@@ -99,7 +97,6 @@ namespace HttpOverStream.Client
 
                 Debug.WriteLine("Client: Waiting for response");
                 string statusLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-                writeContentCTS.Cancel();
                 Debug.WriteLine("Client: Read 1st response line");
                 ParseStatusLine(response, statusLine);
                 Debug.WriteLine("Client: ParseStatusLine");
@@ -108,13 +105,13 @@ namespace HttpOverStream.Client
                     var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line.Length == 0)
                     {
-                        Debug.WriteLine("Client: Found empty line, end of response");
+                        Debug.WriteLine("Client: Found empty line, end of response headers");
                         break;
                     }
                     try
-                {
-                    Debug.WriteLine("Client: Parsing line:" + line);
-                    (var name, var value) = HttpParser.ParseHeaderNameValues(line);
+                    {
+                        Debug.WriteLine("Client: Parsing line:" + line);
+                        (var name, var value) = HttpParser.ParseHeaderNameValues(line);
                         if (!response.Headers.TryAddWithoutValidation(name, value))
                         {
                             response.Content.Headers.TryAddWithoutValidation(name, value);
@@ -125,8 +122,9 @@ namespace HttpOverStream.Client
                         throw new HttpRequestException("Error parsing header", ex);
                     }
                 }
-                Debug.WriteLine("Client: Finished reading response lines");
+                Debug.WriteLine("Client: Finished reading response header lines");
                 responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd: true), response.Content.Headers.ContentLength);
+                writeContentCTS.Cancel();
                 return response;
             }
             catch(Exception e)

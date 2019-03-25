@@ -71,7 +71,7 @@ namespace HttpOverStream.NamedPipe
             }
             catch (AggregateException a) when (a.InnerExceptions.All(e => e is ObjectDisposedException))
             {
-                // NamedPipe cancellations can throw ObjectNotDisposedException
+                // NamedPipe cancellations can throw ObjectDisposedException
                 // They will be grouped in an AggregateException and this shouldnt break
             }
             try
