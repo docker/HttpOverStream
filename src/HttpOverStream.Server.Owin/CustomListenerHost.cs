@@ -191,21 +191,27 @@ namespace HttpOverStream.Server.Owin
         private class WriteInterceptStream : Stream
         {
             private readonly Stream _innerStream;
-            private Func<Task> _once;
+            private Once<Task> _onFirstWrite;
 
-            public WriteInterceptStream(Stream innerStream, Func<Task> once)
+            private Task OnWriteAsync()
+            {
+                (var task, var shouldAwait) = _onFirstWrite.Do();
+                if (shouldAwait)
+                {
+                    return task;
+                }
+                return Task.CompletedTask;
+            }
+
+            public WriteInterceptStream(Stream innerStream, Func<Task> onFirstWrite)
             {
                 _innerStream = innerStream;
-                _once = once;
+                _onFirstWrite = new Once<Task>(onFirstWrite);
             }
 
             public override void Flush()
             {
-                var once = Interlocked.Exchange(ref _once, null);
-                if (once != null)
-                {
-                    once().Wait();
-                }
+                OnWriteAsync().Wait();
                 _innerStream.Flush();
             }
             public override long Seek(long offset, SeekOrigin origin) => _innerStream.Seek(offset, origin);
@@ -213,11 +219,7 @@ namespace HttpOverStream.Server.Owin
             public override int Read(byte[] buffer, int offset, int count) => throw new NotImplementedException();
             public override void Write(byte[] buffer, int offset, int count)
             {
-                var once = Interlocked.Exchange(ref _once, null);
-                if (once != null)
-                {
-                    once().Wait();
-                }
+                OnWriteAsync().Wait();
                 _innerStream.Write(buffer, offset, count);
             }
 
@@ -250,35 +252,21 @@ namespace HttpOverStream.Server.Owin
             }
             public override Task FlushAsync(CancellationToken cancellationToken)
             {
-                var once = Interlocked.Exchange(ref _once, null);
-                if (once == null)
-                {
-                    return _innerStream.FlushAsync(cancellationToken);
-                }
-                return once().ContinueWith(previous =>
+                return OnWriteAsync().ContinueWith(previous =>
                 {
                     return _innerStream.FlushAsync(cancellationToken);
                 }, cancellationToken).Unwrap();
             }
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
-                var once = Interlocked.Exchange(ref _once, null);
-                if (once == null)
-                {
-                    return _innerStream.WriteAsync(buffer, offset, count, cancellationToken);
-                }
-                return once().ContinueWith(previous =>
+                return OnWriteAsync().ContinueWith(previous =>
                 {
                     return _innerStream.WriteAsync(buffer, offset, count, cancellationToken);
                 }, cancellationToken).Unwrap();
             }
             public override void WriteByte(byte value)
             {
-                var once = Interlocked.Exchange(ref _once, null);
-                if (once != null)
-                {
-                    once().Wait();
-                }
+                OnWriteAsync().Wait();
                 _innerStream.WriteByte(value);
             }
         }
