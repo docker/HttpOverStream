@@ -41,31 +41,40 @@ namespace HttpOverStream.Server.Owin
             {
                 using (stream)
                 {
+                    var sendHeadersCallback = new List<(Action<object>, object)>();
                     var owinContext = new OwinContext();
+                    // this is an owin extension
+                    owinContext.Set<Action<Action<object>, object>>("server.OnSendingHeaders", (callback, state) =>
+                    {
+                        sendHeadersCallback.Add((callback, state));
+                    });
                     owinContext.Set("owin.Version", "1.0");
+
                     Debug.WriteLine("Server: reading message..");
                     await PopulateRequestAsync(stream, owinContext.Request, CancellationToken.None).ConfigureAwait(false);
                     Debug.WriteLine("Server: finished reading message");
-                    using (var body = new MemoryStream())
+                    var body = new WriteInterceptStream(stream, async () =>
                     {
-                        owinContext.Response.Body = body;
-                        // execute higher level middleware
-                        Debug.WriteLine("Server: executing middleware..");
-                        await _app(owinContext.Environment).ConfigureAwait(false);
-                        Debug.WriteLine("Server: finished executing middleware..");
-                        // write the response
-                        await body.FlushAsync().ConfigureAwait(false);
-                        Debug.WriteLine("Server: flushed.");
+                        // notify we are sending headers
+                        foreach ((var callback, var state) in sendHeadersCallback)
+                        {
+                            callback(state);
+                        }
+                        // send status and headers
                         string statusCode = owinContext.Response.StatusCode.ToString();
                         Debug.WriteLine("Server: Statuscode was " + statusCode);
                         await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, statusCode, owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
                         Debug.WriteLine("Server: Wrote status and headers.");
-                        body.Position = 0;
-                        await body.CopyToAsync(stream).ConfigureAwait(false);
-                        Debug.WriteLine("Server: CopyToAsync.");
                         await stream.FlushAsync().ConfigureAwait(false);
-                        Debug.WriteLine("Server: Flush 2.");
-                    }
+
+                    });
+                    owinContext.Response.Body = body;
+                    // execute higher level middleware
+                    Debug.WriteLine("Server: executing middleware..");
+                    await _app(owinContext.Environment).ConfigureAwait(false);
+                    Debug.WriteLine("Server: finished executing middleware..");
+                    await body.FlushAsync().ConfigureAwait(false);
+                    Debug.WriteLine("Server: Flush 2.");
                 }
             }
             catch (EndOfStreamException e)
@@ -114,7 +123,7 @@ namespace HttpOverStream.Server.Owin
             long? length = null;
 
             var contentLengthValues = request.Headers.GetValues("Content-Length");
-            if (contentLengthValues!= null && contentLengthValues.Count > 0)
+            if (contentLengthValues != null && contentLengthValues.Count > 0)
             {
                 length = long.Parse(contentLengthValues[0]);
             }
@@ -152,7 +161,7 @@ namespace HttpOverStream.Server.Owin
         {
             IServiceProvider services = ServicesFactory.Create();
             var engine = services.GetService<IHostingEngine>();
-            context.ServerFactory = new ServerFactoryAdapter(new CustomListenerHostFactory(listener));            
+            context.ServerFactory = new ServerFactoryAdapter(new CustomListenerHostFactory(listener));
             return engine.Start(context);
         }
 
@@ -179,6 +188,99 @@ namespace HttpOverStream.Server.Owin
             }
         }
 
-    }
+        private class WriteInterceptStream : Stream
+        {
+            private readonly Stream _innerStream;
+            private Func<Task> _once;
 
+            public WriteInterceptStream(Stream innerStream, Func<Task> once)
+            {
+                _innerStream = innerStream;
+                _once = once;
+            }
+
+            public override void Flush()
+            {
+                var once = Interlocked.Exchange(ref _once, null);
+                if (once != null)
+                {
+                    once().Wait();
+                }
+                _innerStream.Flush();
+            }
+            public override long Seek(long offset, SeekOrigin origin) => _innerStream.Seek(offset, origin);
+            public override void SetLength(long value) => _innerStream.SetLength(value);
+            public override int Read(byte[] buffer, int offset, int count) => throw new NotImplementedException();
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                var once = Interlocked.Exchange(ref _once, null);
+                if (once != null)
+                {
+                    once().Wait();
+                }
+                _innerStream.Write(buffer, offset, count);
+            }
+
+            public override bool CanRead => false;
+            public override bool CanSeek => _innerStream.CanSeek;
+            public override bool CanWrite => _innerStream.CanWrite;
+            public override long Length => _innerStream.Length;
+            public override long Position { get => _innerStream.Position; set => _innerStream.Position = value; }
+
+            public override IAsyncResult BeginWrite(byte[] buffer, int offset, int count, AsyncCallback callback, object state)
+            {
+                var task = WriteAsync(buffer, offset, count);
+                var tcs = new TaskCompletionSource<int>(state);
+                task.ContinueWith(t =>
+                {
+                    if (t.IsFaulted)
+                        tcs.TrySetException(t.Exception.InnerExceptions);
+                    else if (t.IsCanceled)
+                        tcs.TrySetCanceled();
+                    else
+                        tcs.TrySetResult(0);
+
+                    callback?.Invoke(tcs.Task);
+                }, TaskScheduler.Default);
+                return tcs.Task;
+            }
+            public override void EndWrite(IAsyncResult asyncResult)
+            {
+                ((Task<int>)asyncResult).Wait();
+            }
+            public override Task FlushAsync(CancellationToken cancellationToken)
+            {
+                var once = Interlocked.Exchange(ref _once, null);
+                if (once == null)
+                {
+                    return _innerStream.FlushAsync(cancellationToken);
+                }
+                return once().ContinueWith(previous =>
+                {
+                    return _innerStream.FlushAsync(cancellationToken);
+                }, cancellationToken).Unwrap();
+            }
+            public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+            {
+                var once = Interlocked.Exchange(ref _once, null);
+                if (once == null)
+                {
+                    return _innerStream.WriteAsync(buffer, offset, count, cancellationToken);
+                }
+                return once().ContinueWith(previous =>
+                {
+                    return _innerStream.WriteAsync(buffer, offset, count, cancellationToken);
+                }, cancellationToken).Unwrap();
+            }
+            public override void WriteByte(byte value)
+            {
+                var once = Interlocked.Exchange(ref _once, null);
+                if (once != null)
+                {
+                    once().Wait();
+                }
+                _innerStream.WriteByte(value);
+            }
+        }
+    }
 }
