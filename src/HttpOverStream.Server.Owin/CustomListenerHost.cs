@@ -41,22 +41,22 @@ namespace HttpOverStream.Server.Owin
             {
                 using (stream)
                 {
-                    var sendHeadersCallback = new List<(Action<object>, object)>();
+                    var onSendingHeadersCallbacks = new List<(Action<object>, object)>();
                     var owinContext = new OwinContext();
                     // this is an owin extension
                     owinContext.Set<Action<Action<object>, object>>("server.OnSendingHeaders", (callback, state) =>
                     {
-                        sendHeadersCallback.Add((callback, state));
+                        onSendingHeadersCallbacks.Add((callback, state));
                     });
                     owinContext.Set("owin.Version", "1.0");
 
                     Debug.WriteLine("Server: reading message..");
                     await PopulateRequestAsync(stream, owinContext.Request, CancellationToken.None).ConfigureAwait(false);
                     Debug.WriteLine("Server: finished reading message");
-                    var body = new WriteInterceptStream(stream, async () =>
+                    Func<Task> sendHeadersAsync = async () =>
                     {
                         // notify we are sending headers
-                        foreach ((var callback, var state) in sendHeadersCallback)
+                        foreach ((var callback, var state) in onSendingHeadersCallbacks)
                         {
                             callback(state);
                         }
@@ -66,8 +66,8 @@ namespace HttpOverStream.Server.Owin
                         await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, statusCode, owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
                         Debug.WriteLine("Server: Wrote status and headers.");
                         await stream.FlushAsync().ConfigureAwait(false);
-
-                    });
+                    };
+                    var body = new WriteInterceptStream(stream, sendHeadersAsync);
                     owinContext.Response.Body = body;
                     // execute higher level middleware
                     Debug.WriteLine("Server: executing middleware..");
