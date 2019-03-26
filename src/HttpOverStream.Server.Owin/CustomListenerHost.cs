@@ -191,17 +191,7 @@ namespace HttpOverStream.Server.Owin
         private class WriteInterceptStream : Stream
         {
             private readonly Stream _innerStream;
-            private Once<Task> _onFirstWrite;
-
-            private Task OnWriteAsync()
-            {
-                (var task, var shouldAwait) = _onFirstWrite.Do();
-                if (shouldAwait)
-                {
-                    return task;
-                }
-                return Task.CompletedTask;
-            }
+            private readonly Once<Task> _onFirstWrite;
 
             public WriteInterceptStream(Stream innerStream, Func<Task> onFirstWrite)
             {
@@ -211,7 +201,7 @@ namespace HttpOverStream.Server.Owin
 
             public override void Flush()
             {
-                OnWriteAsync().Wait();
+                _onFirstWrite.EnsureDone().Wait();
                 _innerStream.Flush();
             }
             public override long Seek(long offset, SeekOrigin origin) => _innerStream.Seek(offset, origin);
@@ -219,7 +209,7 @@ namespace HttpOverStream.Server.Owin
             public override int Read(byte[] buffer, int offset, int count) => throw new NotImplementedException();
             public override void Write(byte[] buffer, int offset, int count)
             {
-                OnWriteAsync().Wait();
+                _onFirstWrite.EnsureDone().Wait();
                 _innerStream.Write(buffer, offset, count);
             }
 
@@ -252,21 +242,21 @@ namespace HttpOverStream.Server.Owin
             }
             public override Task FlushAsync(CancellationToken cancellationToken)
             {
-                return OnWriteAsync().ContinueWith(previous =>
+                return _onFirstWrite.EnsureDone().ContinueWith(previous =>
                 {
                     return _innerStream.FlushAsync(cancellationToken);
                 }, cancellationToken).Unwrap();
             }
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
-                return OnWriteAsync().ContinueWith(previous =>
+                return _onFirstWrite.EnsureDone().ContinueWith(previous =>
                 {
                     return _innerStream.WriteAsync(buffer, offset, count, cancellationToken);
                 }, cancellationToken).Unwrap();
             }
             public override void WriteByte(byte value)
             {
-                OnWriteAsync().Wait();
+                _onFirstWrite.EnsureDone().Wait();
                 _innerStream.WriteByte(value);
             }
         }

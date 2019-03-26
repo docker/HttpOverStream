@@ -19,7 +19,7 @@ namespace HttpOverStream.Server.Owin.Tests
             var once = new Once<int>(() => Interlocked.Increment(ref value));
             Parallel.For(0, 1000, _ =>
             {
-                once.Do();
+                once.EnsureDone();
             });
             Assert.AreEqual(1, value);
         }

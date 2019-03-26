@@ -9,20 +9,21 @@ namespace HttpOverStream.Server.Owin
 {
     public class Once<T>
     {
+        private T _result;
         private Func<T> _todo;
         public Once(Func<T> todo)
         {
             _todo = todo;
         }
 
-        public (T, bool) Do()
+        public T EnsureDone()
         {
             var todo = Interlocked.Exchange(ref _todo, null);
-            if (todo == null)
+            if (todo != null)
             {
-                return (default(T), false);
+                _result = todo();
             }
-            return (todo(), true);
+            return _result;
         }
     }
 }
