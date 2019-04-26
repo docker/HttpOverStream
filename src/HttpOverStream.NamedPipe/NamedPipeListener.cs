@@ -130,15 +130,31 @@ namespace HttpOverStream.NamedPipe
 
         private (NamedPipeClientStream, NamedPipeServerStream) ConnectDummyClientAndServer(CancellationToken cancellationToken)
         {
-            // Always have another stream active so if HandleStream finishes really quickly theres
-            // no chance of the named pipe being removed altogether.
-            // This is the same pattern as microsofts go library -> https://github.com/Microsoft/go-winio/pull/80/commits/ecd994be061f4ae21f463bbf08166d8edc96cadb
-            var serverStream = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions);
-            serverStream.WaitForConnectionAsync(cancellationToken);
-            var dummyClientStream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            dummyClientStream.Connect(100); // 100ms timeout to connect to itself
+            const int MAX_DUMMYCONNECTION_RETRIES = 500;
+            for (int i = 0; i < MAX_DUMMYCONNECTION_RETRIES; i++)
+            {
+                // Always have another stream active so if HandleStream finishes really quickly theres
+                // no chance of the named pipe being removed altogether.
+                // This is the same pattern as microsofts go library -> https://github.com/Microsoft/go-winio/pull/80/commits/ecd994be061f4ae21f463bbf08166d8edc96cadb
+                var serverStream = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions);
+                serverStream.WaitForConnectionAsync(cancellationToken);
 
-            return (dummyClientStream, serverStream);
+                var dummyClientStream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+                try
+                {
+                    dummyClientStream.Connect(10); // 10ms timeout to connect to itself
+                }
+                catch (Exception)
+                {
+                    Debug.WriteLine("Dummy client couldn't connect, usually because a real client has a pending connection. Closing the pending connection and restarting server..");
+                    serverStream.Disconnect();
+                    continue;
+                }
+
+                return (dummyClientStream, serverStream);
+            }
+
+            throw new Exception("Could not start server - dummy connection could not be made after " + MAX_DUMMYCONNECTION_RETRIES + " retries. This could be because there are too many pending connections on this named pipe. Ensure clients don't spam the server before it's ready.");
         }
 
         private async Task DisposeWhenCancelled(IDisposable disposable, CancellationToken cancellationToken)
