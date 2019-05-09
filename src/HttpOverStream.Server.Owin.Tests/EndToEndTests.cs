@@ -76,6 +76,7 @@ namespace HttpOverStream.Server.Owin.Tests
                 }
             }
         }
+
         [TestMethod]
         public async Task TestGetStressTest_SingleServer()
         {
@@ -101,6 +102,41 @@ namespace HttpOverStream.Server.Owin.Tests
                     var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
                     client.Timeout = TimeSpan.FromSeconds(5);
                     var result = await client.GetAsync("http://localhost/api/e2e-tests/hello-world");
+                    Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
+                }
+            }
+        }
+
+
+        [TestMethod]
+        public async Task TestGetStressTest_ClientBeforeServer()
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                await TestClientStartsFirst_ServerDropsClientButComesUpAfterwards_Impl(100);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+
+                if (Debug.Listeners.Count > 1)
+                {
+                    Debug.Listeners.RemoveAt(1);
+                }
+            }
+        }
+
+        private async Task TestClientStartsFirst_ServerDropsClientButComesUpAfterwards_Impl(int numberOfRequests)
+        {
+            var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName, (int)TimeSpan.FromSeconds(30).TotalMilliseconds)));
+            client.Timeout = TimeSpan.FromSeconds(30);
+            var clientTask = client.GetAsync("http://localhost/api/e2e-tests/hello-world");
+
+            using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
+            {
+                for (int i = 0; i < numberOfRequests; i++)
+                {
+                    var client2 = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
+                    client2.Timeout = TimeSpan.FromSeconds(5);
+                    var result = await client2.GetAsync("http://localhost/api/e2e-tests/hello-world");
                     Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
                 }
             }
