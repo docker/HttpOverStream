@@ -12,6 +12,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Diagnostics;
+using System.Text;
 
 namespace HttpOverStream.Server.Owin
 {
@@ -21,6 +22,7 @@ namespace HttpOverStream.Server.Owin
         private readonly Func<IDictionary<string, object>, Task> _app;
         private readonly ILogger _logger;
         private bool _disposed;
+        static byte[] _eol = Encoding.ASCII.GetBytes("\n");
 
         private CustomListenerHost(IListen listener, Func<IDictionary<string, object>, Task> app, IAppBuilder builder)
         {
@@ -71,7 +73,14 @@ namespace HttpOverStream.Server.Owin
                     owinContext.Response.Body = body;
                     // execute higher level middleware
                     Debug.WriteLine("Server: executing middleware..");
-                    await _app(owinContext.Environment).ConfigureAwait(false);
+                    try
+                    {
+                        await _app(owinContext.Environment).ConfigureAwait(false);
+                    }
+                    catch (Exception e)
+                    {
+                        await HandleMiddlewareException(e, owinContext, body);
+                    }
                     Debug.WriteLine("Server: finished executing middleware..");
                     await body.FlushAsync().ConfigureAwait(false);
                     Debug.WriteLine("Server: Flush 2.");
@@ -87,6 +96,18 @@ namespace HttpOverStream.Server.Owin
                 Debug.WriteLine("Server: Error handling client stream " + e);
                 _logger?.WriteWarning("error handling client stream", e);
             }
+        }
+
+        private async Task HandleMiddlewareException(Exception e, OwinContext owinContext, WriteInterceptStream body)
+        {
+            var logMessage = "Exception trying to execute middleware: " + e;
+            _logger?.WriteError(logMessage);
+            Debug.WriteLine(logMessage);
+
+            owinContext.Response.StatusCode = 500;
+            var payload = Encoding.ASCII.GetBytes("Exception trying to execute middleware. See logs for details.");
+            await body.WriteAsync(payload, 0, payload.Length).ConfigureAwait(false);
+            await body.WriteAsync(_eol, 0, _eol.Length).ConfigureAwait(false);
         }
 
         static Uri _localhostUri = new Uri("http://localhost/");
