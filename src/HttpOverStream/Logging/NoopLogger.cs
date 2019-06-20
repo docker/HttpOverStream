@@ -4,7 +4,6 @@
     {
         public void LogVerbose(string message)
         {
-
         }
 
         public void LogError(string message)
