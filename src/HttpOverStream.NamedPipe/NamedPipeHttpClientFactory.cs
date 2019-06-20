@@ -6,16 +6,16 @@ namespace HttpOverStream.NamedPipe
 {
     public class NamedPipeHttpClientFactory
     {
-        public static HttpClient ForPipeName(string pipeName, TimeSpan? timeout = null)
+        public static HttpClient ForPipeName(string pipeName, TimeSpan? perRequestTimeout = null)
         {
             var httpClient = new HttpClient(new DialMessageHandler(new NamedPipeDialer(pipeName)))
             {
                 BaseAddress = new Uri("http://localhost")
             };
 
-            if (timeout != null)
+            if (perRequestTimeout != null)
             {
-                httpClient.Timeout = timeout.Value;
+                httpClient.Timeout = perRequestTimeout.Value;
             }
 
             return httpClient;

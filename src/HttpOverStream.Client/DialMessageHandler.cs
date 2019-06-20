@@ -73,7 +73,7 @@ namespace HttpOverStream.Client
                 request.Properties.Add(UnderlyingStreamProperty, stream);
 
                 Debug.WriteLine("Client: Writing request");
-                await stream.WriteMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
+                await stream.WriteClientMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
 
                 // as soon as headers are sent, we should begin reading the response, and send the request body concurrently
                 // This is because if the server 404s nothing will ever read the response and it'll hang waiting
