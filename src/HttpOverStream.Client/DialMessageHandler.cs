@@ -5,6 +5,7 @@ using System.Net;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using HttpOverStream.Logging;
 
 namespace HttpOverStream.Client
 {
@@ -12,10 +13,12 @@ namespace HttpOverStream.Client
     {
         public const string UnderlyingStreamProperty = "DIAL_UNDERLYING_STREAM";
         private readonly IDial _dial;
+        private readonly ILoggerHttpOverStream _logger;
 
-        public DialMessageHandler(IDial dial)
+        public DialMessageHandler(IDial dial, ILoggerHttpOverStream logger = null)
         {
             _dial = dial;
+            _logger = logger ?? new NoopLogger();
         }
 
         private class DialResponseContent : HttpContent
@@ -66,14 +69,14 @@ namespace HttpOverStream.Client
             Stream stream = null;
             try
             {
-                Debug.WriteLine("Client: About to connect");
+                _logger.LogVerbose("Client: Trying to connect..");
                 stream = await _dial.DialAsync(request, cancellationToken).ConfigureAwait(false);
 
-                Debug.WriteLine("Client: Connected");
+                _logger.LogVerbose("Client: Connected.");
                 request.Properties.Add(UnderlyingStreamProperty, stream);
 
-                Debug.WriteLine("Client: Writing request");
-                await stream.WriteMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
+                _logger.LogVerbose("Client: Writing request");
+                await stream.WriteClientMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
 
                 // as soon as headers are sent, we should begin reading the response, and send the request body concurrently
                 // This is because if the server 404s nothing will ever read the response and it'll hang waiting
@@ -82,33 +85,33 @@ namespace HttpOverStream.Client
                     {
                         if (request.Content != null)
                         {
-                            Debug.WriteLine("Client: Writing request request.Content.CopyToAsync");
+                            _logger.LogVerbose("Client: Writing request request.Content.CopyToAsync");
                             await request.Content.CopyToAsync(stream).ConfigureAwait(false);
                         }
-                        Debug.WriteLine("Client:  stream.FlushAsync");
+                        _logger.LogVerbose("Client:  stream.FlushAsync");
                         await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                        Debug.WriteLine("Client: Finished writing request");
+                        _logger.LogVerbose("Client: Finished writing request");
                     }, cancellationToken);
 
                 var responseContent = new DialResponseContent();
                 var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
 
-                Debug.WriteLine("Client: Waiting for response");
+                _logger.LogVerbose("Client: Waiting for response");
                 string statusLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-                Debug.WriteLine("Client: Read 1st response line");
+                _logger.LogVerbose("Client: Read 1st response line");
                 ParseStatusLine(response, statusLine);
-                Debug.WriteLine("Client: ParseStatusLine");
+                _logger.LogVerbose("Client: ParseStatusLine");
                 for (; ; )
                 {
                     var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line.Length == 0)
                     {
-                        Debug.WriteLine("Client: Found empty line, end of response headers");
+                        _logger.LogVerbose("Client: Found empty line, end of response headers");
                         break;
                     }
                     try
                     {
-                        Debug.WriteLine("Client: Parsing line:" + line);
+                        _logger.LogVerbose("Client: Parsing line:" + line);
                         (var name, var value) = HttpParser.ParseHeaderNameValues(line);
                         if (!response.Headers.TryAddWithoutValidation(name, value))
                         {
@@ -120,13 +123,13 @@ namespace HttpOverStream.Client
                         throw new HttpRequestException("Error parsing header", ex);
                     }
                 }
-                Debug.WriteLine("Client: Finished reading response header lines");
+                _logger.LogVerbose("Client: Finished reading response header lines");
                 responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd: true), response.Content.Headers.ContentLength);
                 return response;
             }
             catch(Exception e)
             {
-                Debug.WriteLine("Client: EXCEPTION:" + e);
+                _logger.LogError("Client: EXCEPTION:" + e);
                 stream?.Dispose();
                 throw;
             }

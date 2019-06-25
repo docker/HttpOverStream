@@ -52,9 +52,9 @@ namespace HttpOverStream.Server.Owin
                     });
                     owinContext.Set("owin.Version", "1.0");
 
-                    Debug.WriteLine("Server: reading message..");
+                    _logger.WriteVerbose("Server: reading message..");
                     await PopulateRequestAsync(stream, owinContext.Request, CancellationToken.None).ConfigureAwait(false);
-                    Debug.WriteLine("Server: finished reading message");
+                    _logger.WriteVerbose("Server: finished reading message");
                     Func<Task> sendHeadersAsync = async () =>
                     {
                         // notify we are sending headers
@@ -64,15 +64,15 @@ namespace HttpOverStream.Server.Owin
                         }
                         // send status and headers
                         string statusCode = owinContext.Response.StatusCode.ToString();
-                        Debug.WriteLine("Server: Statuscode was " + statusCode);
-                        await stream.WriteResponseStatusAndHeadersAsync(owinContext.Request.Protocol, statusCode, owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);
-                        Debug.WriteLine("Server: Wrote status and headers.");
+                        _logger.WriteVerbose("Server: Statuscode was " + statusCode);
+                        await stream.WriteServerResponseStatusAndHeadersAsync(owinContext.Request.Protocol, statusCode, owinContext.Response.ReasonPhrase, owinContext.Response.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), _logger.WriteVerbose, CancellationToken.None).ConfigureAwait(false);
+                        _logger.WriteVerbose("Server: Wrote status and headers.");
                         await stream.FlushAsync().ConfigureAwait(false);
                     };
                     var body = new WriteInterceptStream(stream, sendHeadersAsync);
                     owinContext.Response.Body = body;
                     // execute higher level middleware
-                    Debug.WriteLine("Server: executing middleware..");
+                    _logger.WriteVerbose("Server: executing middleware..");
                     try
                     {
                         await _app(owinContext.Environment).ConfigureAwait(false);
@@ -81,28 +81,25 @@ namespace HttpOverStream.Server.Owin
                     {
                         await HandleMiddlewareException(e, owinContext, body);
                     }
-                    Debug.WriteLine("Server: finished executing middleware..");
+                    _logger.WriteVerbose("Server: finished executing middleware..");
                     await body.FlushAsync().ConfigureAwait(false);
-                    Debug.WriteLine("Server: Flush 2.");
+                    _logger.WriteVerbose("Server: Finished request. Disposing connection.");
                 }
             }
             catch (EndOfStreamException e)
             {
-                Debug.WriteLine("Server: Error handling client stream, (Client disconnected early / invalid HTTP request)");
-                _logger?.WriteWarning("Error handling client stream, (Client disconnected early / invalid HTTP request)", e);
+                _logger.WriteWarning("Server: Error handling client stream, (Client disconnected early / invalid HTTP request)", e);
             }
             catch (Exception e)
             {
-                Debug.WriteLine("Server: Error handling client stream " + e);
-                _logger?.WriteWarning("error handling client stream", e);
+                _logger.WriteError("Server: Error handling client stream " + e);
             }
         }
 
         private async Task HandleMiddlewareException(Exception e, OwinContext owinContext, WriteInterceptStream body)
         {
             var logMessage = "Exception trying to execute middleware: " + e;
-            _logger?.WriteError(logMessage);
-            Debug.WriteLine(logMessage);
+            _logger.WriteError(logMessage);
 
             owinContext.Response.StatusCode = 500;
             var payload = Encoding.ASCII.GetBytes("Exception trying to execute middleware. See logs for details.");
@@ -120,6 +117,8 @@ namespace HttpOverStream.Server.Owin
             {
                 throw new FormatException($"{firstLine} is not a valid request status");
             }
+
+            _logger.WriteVerbose("Incoming request:" + firstLine);
             request.Method = parts[0];
             request.Protocol = parts[2];
             var uri = new Uri(parts[1], UriKind.RelativeOrAbsolute);
@@ -134,6 +133,7 @@ namespace HttpOverStream.Server.Owin
                 {
                     break;
                 }
+                _logger.WriteVerbose("Incoming header:" + line);
                 (var name, var values) = HttpParser.ParseHeaderNameValues(line);
                 request.Headers.Add(name, values.ToArray());
             }

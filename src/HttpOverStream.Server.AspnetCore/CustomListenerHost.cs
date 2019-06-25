@@ -49,7 +49,7 @@ namespace HttpOverStream.Server.AspnetCore
                     var body = new MemoryStream();
                     responseFeature.Body = body;
                     await application.ProcessRequestAsync(ctx).ConfigureAwait(false);
-                    await stream.WriteResponseStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), CancellationToken.None).ConfigureAwait(false);                    
+                    await stream.WriteServerResponseStatusAndHeadersAsync(requestFeature.Protocol, responseFeature.StatusCode.ToString(), responseFeature.ReasonPhrase, responseFeature.Headers.Select(i => new KeyValuePair<string, IEnumerable<string>>(i.Key, i.Value)), _=>{}, CancellationToken.None).ConfigureAwait(false);                    
                     body.Position = 0;
                     await body.CopyToAsync(stream).ConfigureAwait(false);
                     await stream.FlushAsync().ConfigureAwait(false);

@@ -344,12 +344,15 @@ namespace HttpOverStream.Server.Owin.Tests
 
         class TestLoggerFactory : ILoggerFactory, ILogger
         {
-            public TaskCompletionSource<Exception> ExceptionReceived { get; private set; } = new TaskCompletionSource<Exception>();
+            public TaskCompletionSource<Exception> ExceptionReceived { get; } = new TaskCompletionSource<Exception>();
             public ILogger Create(string name) => this;
             
             public bool WriteCore(TraceEventType eventType, int eventId, object state, Exception exception, Func<object, Exception, string> formatter)
             {
-                ExceptionReceived.TrySetResult(exception);
+                if (exception != null)
+                {
+                    ExceptionReceived.TrySetResult(exception);
+                }
                 return true;
             }
         }
