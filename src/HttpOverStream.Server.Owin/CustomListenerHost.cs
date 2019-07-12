@@ -11,7 +11,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Diagnostics;
 using System.Text;
 
 namespace HttpOverStream.Server.Owin
@@ -22,13 +21,13 @@ namespace HttpOverStream.Server.Owin
         private readonly Func<IDictionary<string, object>, Task> _app;
         private readonly ILogger _logger;
         private bool _disposed;
-        static byte[] _eol = Encoding.ASCII.GetBytes("\n");
+        static readonly byte[] _eol = Encoding.ASCII.GetBytes("\n");
 
         private CustomListenerHost(IListen listener, Func<IDictionary<string, object>, Task> app, IAppBuilder builder)
         {
             _listener = listener;
             _app = app;
-            _logger = builder.CreateLogger<CustomListenerHost>();
+            _logger = builder.CreateLogger("HttpOS.Owin.CLH");
         }
 
 
@@ -263,17 +262,17 @@ namespace HttpOverStream.Server.Owin
             }
             public override Task FlushAsync(CancellationToken cancellationToken)
             {
-                return _onFirstWrite.EnsureDone().ContinueWith(previous =>
-                {
-                    return _innerStream.FlushAsync(cancellationToken);
-                }, cancellationToken).Unwrap();
+                return _onFirstWrite
+                    .EnsureDone()
+                    .ContinueWith(previous => _innerStream.FlushAsync(cancellationToken), cancellationToken)
+                    .Unwrap();
             }
             public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken)
             {
-                return _onFirstWrite.EnsureDone().ContinueWith(previous =>
-                {
-                    return _innerStream.WriteAsync(buffer, offset, count, cancellationToken);
-                }, cancellationToken).Unwrap();
+                return _onFirstWrite
+                    .EnsureDone()
+                    .ContinueWith(previous => _innerStream.WriteAsync(buffer, offset, count, cancellationToken), cancellationToken)
+                    .Unwrap();
             }
             public override void WriteByte(byte value)
             {
