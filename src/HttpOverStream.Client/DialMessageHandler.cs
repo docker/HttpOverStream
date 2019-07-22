@@ -187,7 +187,7 @@ namespace HttpOverStream.Client
 
         private void ValidateAndNormalizeRequest(HttpRequestMessage request)
         {
-            request.Version = HttpVersion.Version11;
+            request.Version = HttpVersion.Version10;
             // Add headers to define content transfer, if not present
             if (request.Headers.TransferEncodingChunked.GetValueOrDefault())
             {
