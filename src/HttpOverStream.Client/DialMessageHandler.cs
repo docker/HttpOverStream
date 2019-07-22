@@ -12,12 +12,26 @@ namespace HttpOverStream.Client
     {
         public const string UnderlyingStreamProperty = "DIAL_UNDERLYING_STREAM";
         private readonly IDial _dial;
+        private readonly Version _httpVersion;
         private readonly ILoggerHttpOverStream _logger;
 
-        public DialMessageHandler(IDial dial, ILoggerHttpOverStream logger = null)
+        public DialMessageHandler(IDial dial) : this(dial, null, null)
         {
-            _dial = dial;
+        }
+
+        public DialMessageHandler(IDial dial, ILoggerHttpOverStream logger) : this(dial, logger, null)
+        {
+        }
+
+        public DialMessageHandler(IDial dial, Version httpVersion) : this(dial, null, httpVersion)
+        {
+        }
+
+        public DialMessageHandler(IDial dial, ILoggerHttpOverStream logger, Version httpVersion)
+        {
+            _dial = dial ?? throw new ArgumentNullException(nameof(dial));
             _logger = logger ?? new NoopLogger();
+            _httpVersion = httpVersion ?? HttpVersion.Version10;
         }
 
         private class DialResponseContent : HttpContent
@@ -139,14 +153,14 @@ namespace HttpOverStream.Client
             const int MinStatusLineLength = 12; // "HTTP/1.x 123" 
             if (line.Length < MinStatusLineLength || line[8] != ' ')
             {
-                throw new HttpRequestException("Invalid response, expecting HTTP/1.0");
+                throw new HttpRequestException("Invalid response, expecting HTTP/1.0 or 1.1, was:" + line);
             }
 
-            if (!line.StartsWith("HTTP/1.0"))
+            if (!line.StartsWith("HTTP/1."))
             {                
-                throw new HttpRequestException("Invalid response, expecting HTTP/1.0");
+                throw new HttpRequestException("Invalid response, expecting HTTP/1.0 or 1.1, was:" + line);
             }
-            response.Version = HttpVersion.Version10;
+            response.Version = _httpVersion;
             // Set the status code
             if (int.TryParse(line.Substring(9,3), out int statusCode))
             {
@@ -154,7 +168,7 @@ namespace HttpOverStream.Client
             }
             else
             {
-                throw new HttpRequestException("Invalid response, can't parse status code");
+                throw new HttpRequestException("Invalid response, can't parse status code. Line was:" + line);
             }
             // Parse (optional) reason phrase
             if (line.Length == MinStatusLineLength)
@@ -173,7 +187,7 @@ namespace HttpOverStream.Client
 
         private void ValidateAndNormalizeRequest(HttpRequestMessage request)
         {
-            request.Version = HttpVersion.Version10;
+            request.Version = HttpVersion.Version11;
             // Add headers to define content transfer, if not present
             if (request.Headers.TransferEncodingChunked.GetValueOrDefault())
             {

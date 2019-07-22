@@ -7,9 +7,9 @@ namespace HttpOverStream.NamedPipe
 {
     public class NamedPipeHttpClientFactory
     {
-        public static HttpClient ForPipeName(string pipeName, ILoggerHttpOverStream logger = null, TimeSpan? perRequestTimeout = null)
+        public static HttpClient ForPipeName(string pipeName, ILoggerHttpOverStream logger = null, TimeSpan? perRequestTimeout = null, Version httpVersion = null)
         {
-            var httpClient = new HttpClient(new DialMessageHandler(new NamedPipeDialer(pipeName), logger))
+            var httpClient = new HttpClient(new DialMessageHandler(new NamedPipeDialer(pipeName), logger, httpVersion))
             {
                 BaseAddress = new Uri("http://localhost")
             };

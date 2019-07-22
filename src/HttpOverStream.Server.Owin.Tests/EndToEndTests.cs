@@ -6,6 +6,7 @@ using Owin;
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading;
@@ -56,9 +57,14 @@ namespace HttpOverStream.Server.Owin.Tests
         public TestContext TestContext { get; set; }
 
         [TestMethod]
-        public async Task TestGet()
+        public async Task TestGet_Http10()
         {
-            await TestGet_Impl();
+            await TestGet_Impl(1, HttpVersion.Version10);
+        }
+        [TestMethod]
+        public async Task TestGet_Http11()
+        {
+            await TestGet_Impl(1, HttpVersion.Version11);
         }
 
         [TestMethod]
@@ -93,13 +99,13 @@ namespace HttpOverStream.Server.Owin.Tests
             }
         }
 
-        private async Task TestGet_Impl(int numberOfRequests = 1)
+        private async Task TestGet_Impl(int numberOfRequests = 1, Version httpVersion = null)
         {
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
                 for (int i = 0; i < numberOfRequests; i++)
                 {
-                    var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
+                    var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName), null, httpVersion));
                     client.Timeout = TimeSpan.FromSeconds(5);
                     var result = await client.GetAsync("http://localhost/api/e2e-tests/hello-world");
                     Assert.AreEqual("Hello World", await result.Content.ReadAsAsync<string>());
