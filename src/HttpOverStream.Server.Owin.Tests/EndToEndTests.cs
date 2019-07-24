@@ -281,6 +281,13 @@ namespace HttpOverStream.Server.Owin.Tests
         }
 
         [TestMethod]
+        public async Task TestPost_WhenNoServerListening_ThrowsTimeoutException()
+        {
+            var client = new HttpClient(new DialMessageHandler(new NamedPipeDialer(TestContext.TestName)));
+            await Assert.ThrowsExceptionAsync<TimeoutException>(async () => await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" }));
+        }
+
+        [TestMethod]
         public async Task TestStreamInteruption()
         {
             await TestStreamInterruption_Impl();

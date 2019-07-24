@@ -82,49 +82,51 @@ namespace HttpOverStream.Client
             Stream stream = null;
             try
             {
-                _logger.LogVerbose("Client: Trying to connect..");
+                _logger.LogVerbose("HttpOS Client: Trying to connect..");
                 stream = await _dial.DialAsync(request, cancellationToken).ConfigureAwait(false);
 
-                _logger.LogVerbose("Client: Connected.");
+                _logger.LogVerbose("HttpOS Client: Connected.");
                 request.Properties.Add(UnderlyingStreamProperty, stream);
 
-                _logger.LogVerbose("Client: Writing request");
+                _logger.LogVerbose("HttpOS Client: Writing request");
                 await stream.WriteClientMethodAndHeadersAsync(request, cancellationToken).ConfigureAwait(false);
 
                 // as soon as headers are sent, we should begin reading the response, and send the request body concurrently
                 // This is because if the server 404s nothing will ever read the response and it'll hang waiting
                 // for someone to read it
                 var writeContentTask = Task.Run(async () => // Cancel this task if server response detected
+                {
+                    if (request.Content != null)
                     {
-                        if (request.Content != null)
-                        {
-                            _logger.LogVerbose("Client: Writing request request.Content.CopyToAsync");
-                            await request.Content.CopyToAsync(stream).ConfigureAwait(false);
-                        }
-                        _logger.LogVerbose("Client:  stream.FlushAsync");
-                        await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
-                        _logger.LogVerbose("Client: Finished writing request");
-                    }, cancellationToken);
+                        _logger.LogVerbose("HttpOS Client: Writing request request.Content.CopyToAsync");
+                        await request.Content.CopyToAsync(stream).ConfigureAwait(false);
+                    }
+
+                    _logger.LogVerbose("HttpOS Client:  stream.FlushAsync");
+                    await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                    _logger.LogVerbose("HttpOS Client: Finished writing request");
+                }, cancellationToken);
 
                 var responseContent = new DialResponseContent();
-                var response = new HttpResponseMessage { RequestMessage = request, Content = responseContent };
+                var response = new HttpResponseMessage {RequestMessage = request, Content = responseContent};
 
-                _logger.LogVerbose("Client: Waiting for response");
+                _logger.LogVerbose("HttpOS Client: Waiting for response");
                 string statusLine = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
-                _logger.LogVerbose("Client: Read 1st response line");
+                _logger.LogVerbose("HttpOS Client: Read 1st response line");
                 ParseStatusLine(response, statusLine);
-                _logger.LogVerbose("Client: ParseStatusLine");
-                for (; ; )
+                _logger.LogVerbose("HttpOS Client: ParseStatusLine");
+                for (;;)
                 {
                     var line = await stream.ReadLineAsync(cancellationToken).ConfigureAwait(false);
                     if (line.Length == 0)
                     {
-                        _logger.LogVerbose("Client: Found empty line, end of response headers");
+                        _logger.LogVerbose("HttpOS Client: Found empty line, end of response headers");
                         break;
                     }
+
                     try
                     {
-                        _logger.LogVerbose("Client: Parsing line:" + line);
+                        _logger.LogVerbose("HttpOS Client: Parsing line:" + line);
                         (var name, var value) = HttpParser.ParseHeaderNameValues(line);
                         if (!response.Headers.TryAddWithoutValidation(name, value))
                         {
@@ -136,13 +138,22 @@ namespace HttpOverStream.Client
                         throw new HttpRequestException("Error parsing header", ex);
                     }
                 }
-                _logger.LogVerbose("Client: Finished reading response header lines");
-                responseContent.SetContent(new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd: true), response.Content.Headers.ContentLength);
+
+                _logger.LogVerbose("HttpOS Client: Finished reading response header lines");
+                responseContent.SetContent(
+                    new BodyStream(stream, response.Content.Headers.ContentLength, closeOnReachEnd: true),
+                    response.Content.Headers.ContentLength);
                 return response;
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogWarning("HttpOS Client: connection timed out.");
+                stream?.Dispose();
+                throw;
             }
             catch(Exception e)
             {
-                _logger.LogError("Client: EXCEPTION:" + e);
+                _logger.LogError("HttpOS Client: Exception:" + e.Message);
                 stream?.Dispose();
                 throw;
             }
