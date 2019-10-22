@@ -102,7 +102,7 @@ namespace HttpOverStream.Client
                         await request.Content.CopyToAsync(stream).ConfigureAwait(false);
                     }
 
-                    _logger.LogVerbose("HttpOS Client:  stream.FlushAsync");
+                    _logger.LogVerbose("HttpOS Client: stream.FlushAsync");
                     await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                     _logger.LogVerbose("HttpOS Client: Finished writing request");
                 }, cancellationToken);

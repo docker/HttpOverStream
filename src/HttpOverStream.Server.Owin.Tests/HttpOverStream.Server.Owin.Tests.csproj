@@ -80,6 +80,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="TestLoggingHandler.cs" />
     <Compile Include="EndToEndTests.cs" />
     <Compile Include="OnceTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
