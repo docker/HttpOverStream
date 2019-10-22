@@ -7,13 +7,21 @@ namespace HttpOverStream.NamedPipe
 {
     public class NamedPipeHttpClientFactory
     {
-        public static HttpClient ForPipeName(string pipeName, ILoggerHttpOverStream logger = null, TimeSpan? perRequestTimeout = null, Version httpVersion = null)
+        public static HttpClient ForPipeName(string pipeName, ILoggerHttpOverStream logger = null, TimeSpan? perRequestTimeout = null, Version httpVersion = null, DelegatingHandler outerHandler = null )
         {
-            var httpClient = new HttpClient(new DialMessageHandler(new NamedPipeDialer(pipeName), logger, httpVersion))
+            var innerHandler = new DialMessageHandler(new NamedPipeDialer(pipeName), logger, httpVersion);
+            HttpClient httpClient;
+            if (outerHandler != null)
             {
-                BaseAddress = new Uri("http://localhost")
-            };
+                outerHandler.InnerHandler = innerHandler;
+                httpClient = new HttpClient(outerHandler);
+            }
+            else
+            {
+                httpClient = new HttpClient(innerHandler);
+            }
 
+            httpClient.BaseAddress = new Uri("http://localhost");
             if (perRequestTimeout != null)
             {
                 httpClient.Timeout = perRequestTimeout.Value;
