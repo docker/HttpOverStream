@@ -41,8 +41,8 @@ Task("Nuget-pack")
   .IsDependentOn("Nuget-Restore")
   .Does(()=>{
     var version = "0.1.0";
-    if(BuildSystem.AppVeyor.Environment.Repository.Tag.IsTag){
-      version = BuildSystem.AppVeyor.Environment.Repository.Tag.Name;
+    if(HasEnvironmentVariable("TAG_NAME")){
+      version = EnvironmentVariable("TAG_NAME");
     }
     var settings = new DotNetCorePackSettings
      {
@@ -58,7 +58,7 @@ Task("Nuget-pack")
 Task("Nuget-push")
 .IsDependentOn("Nuget-pack")
 .Does(()=>{
-  if(!BuildSystem.AppVeyor.Environment.Repository.Tag.IsTag){
+  if(!HasEnvironmentVariable("TAG_NAME")){
     return;
   }
    // Get the paths to the packages.
