@@ -33,7 +33,7 @@ pipeline {
               NugetAPIKey = credentials('nuget-api-key')
             }
             steps {
-                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src -e NugetAPIKey mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Nuget-push'
+                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src -e NugetAPIKey -e TAG_NAME mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Nuget-push'
             }
         }
     }
