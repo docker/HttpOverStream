@@ -24,7 +24,7 @@ pipeline {
         }
         stage('Nuget-pack') {
             steps {
-                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Nuget-pack'
+                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src -e TAG_NAME mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Nuget-pack'
             }
         }
         stage('Nuget-push') {
