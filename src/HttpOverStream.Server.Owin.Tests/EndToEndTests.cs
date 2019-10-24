@@ -193,7 +193,7 @@ namespace HttpOverStream.Server.Owin.Tests
         {
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
-                var client = NamedPipeHttpClientFactory.ForPipeName(TestContext.TestName);
+                var client = new NamedPipeHttpClientBuilder(TestContext.TestName).Build();
                 try
                 {
                     var badContent = new StringContent("{ }");
@@ -277,7 +277,7 @@ namespace HttpOverStream.Server.Owin.Tests
         {
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
-                var client = NamedPipeHttpClientFactory.ForPipeName(TestContext.TestName);
+                var client = new NamedPipeHttpClientBuilder(TestContext.TestName).Build();
                 var result = await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" });
                 var wlcMsg = await result.Content.ReadAsAsync<WelcomeMessage>();
                 Assert.AreEqual("Hello Test", wlcMsg.Text);
@@ -287,7 +287,7 @@ namespace HttpOverStream.Server.Owin.Tests
         [TestMethod]
         public async Task TestPost_WhenNoServerListening_ThrowsTimeoutException()
         {
-            var client = NamedPipeHttpClientFactory.ForPipeName(TestContext.TestName);
+            var client = new NamedPipeHttpClientBuilder(TestContext.TestName).Build();
             await Assert.ThrowsExceptionAsync<TimeoutException>(async () => await client.PostAsJsonAsync("http://localhost/api/e2e-tests/hello", new PersonMessage { Name = "Test" }));
         }
 
@@ -338,7 +338,9 @@ namespace HttpOverStream.Server.Owin.Tests
         {
             using (CustomListenerHost.Start(SetupDefaultAppBuilder, new NamedPipeListener(TestContext.TestName)))
             {
-                var client = NamedPipeHttpClientFactory.ForPipeName(TestContext.TestName, null, TimeSpan.FromMilliseconds(100));
+                var client = new NamedPipeHttpClientBuilder(TestContext.TestName)
+                    .WithPerRequestTimeout(TimeSpan.FromMilliseconds(100))
+                    .Build();
                 var sw = Stopwatch.StartNew();
                 await Assert.ThrowsExceptionAsync<TaskCanceledException>(async () =>
                 {
