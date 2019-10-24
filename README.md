@@ -18,7 +18,9 @@ Server usage (OWIN) is like this:
 Client usage:
 
 ```
-    HttpClient = NamedPipeHttpClientFactory.ForPipeName(pipeName);
+    _httpClient = new NamedPipeHttpClientBuilder("myPipeName")
+                    .WithPerRequestTimeout(TimeSpan.FromSeconds(5))
+                    .Build();
     
-    var response = await HttpClient.GetAsync("/api/endpoint");
+    var response = await _httpClient.GetAsync("/api/endpoint");
 ```
