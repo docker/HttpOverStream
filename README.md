@@ -1,6 +1,5 @@
 # HttpOverStream
-
-[![NuGet version (HttpOverStream)](https://img.shields.io/nuget/v/HttpOverStream.svg)](https://www.nuget.org/packages/HttpOverStream/)
+[![NuGet](https://img.shields.io/nuget/v/HttpOverStream?color=green)](https://www.nuget.org/packages/HttpOverStream/)
 
 Used by Docker Desktop. (See http://github.com/docker/pinata)
 
