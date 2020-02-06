@@ -20,19 +20,21 @@ namespace HttpOverStream.NamedPipe
         private readonly int _maxAllowedServerInstances;
         private static readonly int _numServerThreads = 5;
         private readonly ILoggerHttpOverStream _logger;
+        private readonly PipeSecurity _pipeSecurity;
 
-        public NamedPipeListener(string pipeName, ILoggerHttpOverStream logger = null)
-            : this(pipeName, PipeOptions.Asynchronous, PipeTransmissionMode.Byte, NamedPipeServerStream.MaxAllowedServerInstances, logger)
+        public NamedPipeListener(string pipeName, ILoggerHttpOverStream logger = null, PipeSecurity pipeSecurity = null)
+            : this(pipeName, PipeOptions.Asynchronous, PipeTransmissionMode.Byte, NamedPipeServerStream.MaxAllowedServerInstances, logger, pipeSecurity)
         {
         }
 
-        public NamedPipeListener(string pipeName, PipeOptions pipeOptions, PipeTransmissionMode pipeTransmissionMode, int maxAllowedServerInstances, ILoggerHttpOverStream logger)
+        public NamedPipeListener(string pipeName, PipeOptions pipeOptions, PipeTransmissionMode pipeTransmissionMode, int maxAllowedServerInstances, ILoggerHttpOverStream logger, PipeSecurity pipeSecurity = null)
         {
             _pipeName = pipeName;
             _pipeOptions = pipeOptions;
             _pipeTransmissionMode = pipeTransmissionMode;
             _maxAllowedServerInstances = maxAllowedServerInstances;
             _logger = logger ?? new NoopLogger();
+            _pipeSecurity = pipeSecurity;
         }
 
         public Task StartAsync(Action<Stream> onConnection, CancellationToken cancellationToken)
@@ -94,7 +96,7 @@ namespace HttpOverStream.NamedPipe
             {
                 while (!cancelToken.IsCancellationRequested)
                 {
-                    var serverStream = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions);
+                    var serverStream = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions, 0, 0, _pipeSecurity);
                     try
                     {
                         _logger.LogVerbose("[ thread " + threadNumber + "] Waiting for connection..");
@@ -146,7 +148,7 @@ namespace HttpOverStream.NamedPipe
                 // Always have another stream active so if HandleStream finishes really quickly theres
                 // no chance of the named pipe being removed altogether.
                 // This is the same pattern as microsofts go library -> https://github.com/Microsoft/go-winio/pull/80/commits/ecd994be061f4ae21f463bbf08166d8edc96cadb
-                var serverStream = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions);
+                var serverStream = new NamedPipeServerStream(_pipeName, PipeDirection.InOut, _maxAllowedServerInstances, _pipeTransmissionMode, _pipeOptions, 0, 0, _pipeSecurity);
                 serverStream.WaitForConnectionAsync(cancellationToken);
 
                 var dummyClientStream = new NamedPipeClientStream(".", _pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
