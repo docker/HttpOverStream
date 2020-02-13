@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Net.Http;
+using System.Security.Principal;
 using HttpOverStream.Client;
 using HttpOverStream.Logging;
 
@@ -13,6 +14,7 @@ namespace HttpOverStream.NamedPipe
         private TimeSpan? _perRequestTimeout;
         private Version _httpVersion;
         private TimeSpan? _namedPipeConnectionTimeout;
+        private TokenImpersonationLevel _impersonationLevel = TokenImpersonationLevel.Identification;
 
         public NamedPipeHttpClientBuilder(string pipeName)
         {
@@ -49,11 +51,21 @@ namespace HttpOverStream.NamedPipe
             return this;
         }
 
+        public NamedPipeHttpClientBuilder WithImpersonationLevel(TokenImpersonationLevel impersonationLevel)
+        {
+            _impersonationLevel = impersonationLevel;
+            return this;
+        }
+
         public HttpClient Build()
         {
-            var dialer = _namedPipeConnectionTimeout == null
-                ? new NamedPipeDialer(_pipeName)
-                : new NamedPipeDialer(_pipeName, (int)_namedPipeConnectionTimeout.Value.TotalMilliseconds);
+            var connectionTimeout = 0;
+            if (_namedPipeConnectionTimeout.HasValue)
+            {
+                connectionTimeout = (int)_namedPipeConnectionTimeout.Value.TotalMilliseconds;
+            }
+
+            var dialer = new NamedPipeDialer(_pipeName, ".", System.IO.Pipes.PipeOptions.Asynchronous, connectionTimeout, _impersonationLevel);
 
             var innerHandler = new DialMessageHandler(dialer, _logger, _httpVersion);
             HttpClient httpClient;
