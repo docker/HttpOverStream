@@ -53,6 +53,12 @@ namespace HttpOverStream.Server.Owin
 
                     _logger.WriteVerbose("Server: reading message..");
                     await PopulateRequestAsync(stream, owinContext.Request, CancellationToken.None).ConfigureAwait(false);
+
+                    // some transports (shuch as Named Pipes) may require the server to read some data before being able to get the
+                    // client identity. So we get the client identity after reading the request headers
+                    var transportIdentity = _listener.GetTransportIdentity(stream);
+                    owinContext.Request.User = transportIdentity;
+
                     _logger.WriteVerbose("Server: finished reading message");
                     Func<Task> sendHeadersAsync = async () =>
                     {
