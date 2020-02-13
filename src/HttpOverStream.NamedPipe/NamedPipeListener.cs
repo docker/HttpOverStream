@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Linq;
+using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 using HttpOverStream.Logging;
@@ -187,6 +188,31 @@ namespace HttpOverStream.NamedPipe
             {
                 _logger.LogError($"Exception disposing dummy {threadName} stream: {e}");
             }
+        }
+
+        public IPrincipal GetTransportIdentity(Stream connection)
+        {
+            var serverStream = connection as NamedPipeServerStream;
+            if (serverStream == null)
+            {
+                throw new InvalidOperationException("connection should be a NamedPipeServerStream");
+            }
+
+            WindowsPrincipal principal = null;
+            try
+            {
+                serverStream.RunAsClient(() =>
+                {
+                    principal = new WindowsPrincipal(WindowsIdentity.GetCurrent());
+                });
+            }
+            catch
+            {
+                // this can fail if client explicitly connected with ImpersonationLevel.None.
+                // default is ImpersonationLevel.Identify which runs fine.
+            }
+
+            return principal;
         }
     }
 
