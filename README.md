@@ -2,7 +2,7 @@
 [![NuGet](https://img.shields.io/nuget/v/HttpOverStream?color=green)](https://www.nuget.org/packages/HttpOverStream/)
 [![Build Status](https://ci.docker.com/public/job/HttpOverStream/job/master/badge/icon)](https://ci.docker.com/public/job/HttpOverStream/job/master)
 
-Used by Docker Desktop. (See http://github.com/docker/pinata)
+Used by Docker Desktop.
 
 .NET library for using HTTP 1.1 over streams, especially Windows Named Pipes.
 
