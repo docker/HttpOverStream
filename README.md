@@ -1,6 +1,6 @@
 # HttpOverStream
 [![NuGet](https://img.shields.io/nuget/v/HttpOverStream?color=green)](https://www.nuget.org/packages/HttpOverStream/)
-[![Build Status](https://ci.docker.com/public/job/HttpOverStream/job/master/badge/icon)](https://ci-next.docker.com/public/job/HttpOverStream/job/master)
+[![Build Status](https://ci-next.docker.com/public/job/HttpOverStream/job/master/badge/icon)](https://ci-next.docker.com/public/job/HttpOverStream/job/master/)
 
 Used by Docker Desktop.
 
