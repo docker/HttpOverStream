@@ -14,17 +14,17 @@ pipeline {
     stages {
         stage('Build') {
             steps {
-                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Build'
+                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 --target=Build'
             }
         }
         stage('Test') {
             steps {
-                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Test'
+                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 --target=Test'
             }
         }
         stage('Nuget-pack') {
             steps {
-                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src -e TAG_NAME mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Nuget-pack'
+                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src -e TAG_NAME mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 --target=Nuget-pack'
             }
         }
         stage('Nuget-push') {
@@ -33,7 +33,7 @@ pipeline {
               NugetAPIKey = credentials('nuget-api-key')
             }
             steps {
-                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src -e NugetAPIKey -e TAG_NAME mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 -Target Nuget-push'
+                bat 'docker run --rm -v %cd%:C:/work -w C:/work/src -e NugetAPIKey -e TAG_NAME mcr.microsoft.com/dotnet/framework/sdk:4.8-20190910-windowsservercore-ltsc2019 powershell -File build.ps1 --target=Nuget-push'
             }
         }
     }
