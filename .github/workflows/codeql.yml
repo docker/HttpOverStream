@@ -65,7 +65,7 @@ jobs:
       shell: pwsh
       run: |
         Set-Location -Path .\src
-        ./build.ps1 -Script ./build.cake -Target Build --msbuild-verbosity=Verbose
+        ./build.ps1 -Script ./build.cake --msbuild-verbosity=Verbose
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
