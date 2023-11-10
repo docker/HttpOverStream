@@ -64,8 +64,7 @@ jobs:
     - name: Build
       shell: pwsh
       run: |
-        CD..
-        ./build.ps1
+        ./src/build.ps1 -Script ./src/build.cake -Target Build -Verbosity Verbose
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
