@@ -64,7 +64,8 @@ jobs:
     - name: Build
       shell: pwsh
       run: |
-        ./src/build.ps1
+        CD..
+        ./build.ps1
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
