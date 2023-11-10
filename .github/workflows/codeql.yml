@@ -23,7 +23,7 @@ on:
 jobs:
   analyze:
     name: Analyze
-    runs-on: 'windows-latest'
+    runs-on: 'windows-2019'
     timeout-minutes: 360
     permissions:
       actions: read
@@ -64,7 +64,8 @@ jobs:
     - name: Build
       shell: pwsh
       run: |
-        ./src/build.ps1 -Script ./src/build.cake
+        Set-Location -Path .\src
+        ./build.ps1 -Script ./build.cake -Target Build --msbuild-verbosity=Verbose
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v2
